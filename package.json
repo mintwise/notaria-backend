@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "console-ninja nodemon index.js"
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
