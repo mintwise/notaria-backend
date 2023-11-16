@@ -10,7 +10,7 @@ on:
 jobs:
   build:
 
-    runs-on: SELF-HOSTED
+    runs-on: self-hosted
 
     strategy:
       matrix:
@@ -28,3 +28,4 @@ jobs:
     - run: |
         touch .env
         echo "${{ secrets.PROD_ENV_FILE }}" > .env
+    - run: pm2 restart index
