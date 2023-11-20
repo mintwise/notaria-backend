@@ -24,16 +24,31 @@ const addDocument = async (req, res) => {
       req.body;
     const client = await Client.findOne({ rutClient });
     const contrato = await Pdf.findOne({ rutClient, typeDocument: "Contrato" });
-    if (!client) {
-      res.status(400).json({ message: `No existe cliente.` });
-    }
-    if (!contrato) {
-      res.status(400).json({ message: `No existe contrato.` });
-    }
     const poliza = await Pdf.findOne({ rutClient, typeDocument: "Poliza" });
-    if (poliza) {
-      res.status(400).json({ message: `La poliza ya fue ingresada.` });
-    }
+    if (!client) {
+      res.status(400).json({
+          status: "error",
+          message: "No existe cliente.",
+          data: {}
+      });
+      return;
+  }
+  if (!contrato) {
+      res.status(400).json({
+          status: "error",
+          message: "No existe contrato.",
+          data: {}
+      });
+      return;
+  }
+  if (poliza) {
+      res.status(400).json({
+          status: "error",
+          message: "La poliza ya fue ingresada.",
+          data: {}
+      });
+      return;
+  }
     // función que formatea el nombre del documento
     const filename = formatValue(filenameDocument);
     //inserta la póliza en la bd PDF
@@ -105,9 +120,17 @@ const addDocument = async (req, res) => {
       { rutClient },
       { $push: { documents: documentConglomeradoClient } }
     );
-    return res.status(200).json({ message: "Conglomerado creado." });
+    return res.status(200).json({
+      "status": "success",
+      "message": `Creado con éxito.`,
+      "data": documentConglomerado
+  });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      "status": "error",
+      "message": `${error.message}`,
+      "data": {}
+  });
   }
 };
 const signDocumentConglomerado = async (req, res) => {
@@ -117,10 +140,18 @@ const signDocumentConglomerado = async (req, res) => {
   const user = await User.findOne({ email });
   const conglomeradoDoc = await Pdf.findById({ _id: id });
   if (!user) {
-    return res.status(400).json({ message: "El usuario no existe." });
+    return res.status(400).json({
+      "status": "error",
+      "message": `Usuario no existe.`,
+      "data": {}
+  });
   }
   if (!conglomeradoDoc) {
-    return res.status(400).json({ message: "El documento no existe." });
+    return res.status(400).json({
+      "status": "error",
+      "message": `Documento no existe.`,
+      "data": {}
+  });
   }
   const signatureInfo = {
     Alvaro: {
@@ -185,7 +216,11 @@ const signDocumentConglomerado = async (req, res) => {
           typeDocument: "Template",
         });
         if(!template){
-          return res.status(400).json({message: "No existe el template"})
+          return res.status(400).json({
+            "status": "error",
+            "message": `No existe el template.`,
+            "data": {}
+        });
         }
         const base64Template = await PDFDocument.load(
           Buffer.from(template.base64Document, "base64")
@@ -209,7 +244,13 @@ const signDocumentConglomerado = async (req, res) => {
           base64Document: base64TemplateSignOne,
         });
         await signTemplate.save();
-        return res.status(200).json({ message: "Firma 1 Realizada con éxito" });
+        return res.status(200).json({
+          "status": "success",
+          "message": `Firma 1 Realizada con éxito.`,
+          "data": {
+            signTemplate
+          }
+      });
       }
       if (nameWithoutLastName==='Javier' ) {
         // firmo el segundo
@@ -244,7 +285,11 @@ const signDocumentConglomerado = async (req, res) => {
           typeDocument: "Template",
         });
         if(!template){
-          return res.status(400).json({message: "No existe el template"})
+          return res.status(400).json({
+            "status": "error",
+            "message": `No existe el template.`,
+            "data": {}
+        });
         }
         const base64Template = await PDFDocument.load(
           Buffer.from(template.base64Document, "base64")
@@ -267,7 +312,13 @@ const signDocumentConglomerado = async (req, res) => {
           base64Document: base64TemplateSignOne,
         });
         await signTemplate.save();
-        return res.status(200).json({ message: "Firma 2 Realizada con éxito" });
+        return res.status(200).json({
+          "status": "success",
+          "message": `Firma 2 Realizada con éxito.`,
+          "data": {
+            signTemplate
+          }
+      });
       }
       break;
     case "Pendiente Firma 1":
@@ -297,7 +348,11 @@ const signDocumentConglomerado = async (req, res) => {
         // buscar el template con la firma 2 (id de mongo)
         const signTemplate = await SignTemplate.findOne({ idDocument: id });
         if(!signTemplate){
-          return res.status(400).json({message: "No existe el template"})
+          return res.status(400).json({
+            "status": "error",
+            "message": `No existe el template.`,
+            "data": {}
+        });
         }
         const templateWithSignTwo = await PDFDocument.load(
           Buffer.from(signTemplate.base64Document, "base64")
@@ -321,9 +376,17 @@ const signDocumentConglomerado = async (req, res) => {
           { _id: signTemplate.id },
           { base64Document: base64Template }
         );
-        return res.status(200).json({ message: "Firma 1 Realizada con éxito" });
+        return res.status(200).json({
+          "status": "success",
+          "message": `Firma 1 Realizada con éxito.`,
+          "data": {}
+      });
       } catch (error) {
-        return res.status(400).json({ message: error.message });
+        return res.status(500).json({
+          "status": "error",
+          "message": `${error.message}`,
+          "data": {}
+      });
       }
       break;
     case "Pendiente Firma 2":
@@ -353,7 +416,11 @@ const signDocumentConglomerado = async (req, res) => {
         // buscar el template con la firma 2 (id de mongo)
         const signTemplate2 = await SignTemplate.findOne({ idDocument: id });
         if(!signTemplate2){
-          return res.status(400).json({message: "No existe el template"})
+          return res.status(400).json({
+            "status": "error",
+            "message": `No existe el template.`,
+            "data": {}
+        });
         }
         const templateWithSignOne = await PDFDocument.load(
           Buffer.from(signTemplate2.base64Document, "base64")
@@ -376,9 +443,19 @@ const signDocumentConglomerado = async (req, res) => {
           { idDocument: id },
           { base64Document: base64Template2 }
         );
-        return res.status(200).json({ message: "Firma 2 Realizada con éxito" });
+        return res.status(200).json({
+          "status": "success",
+          "message": `Firma 2 Realizada con éxito.`,
+          "data": {
+            base64signTwo: base64Template2
+          }
+      });
       } catch (error) {
-        res.json({ message: error.message });
+        return res.status(500).json({
+          "status": "error",
+          "message": `${error.message}`,
+          "data": {}
+      });
       }
       break;
   }
@@ -412,7 +489,11 @@ const signDocumentTest = async (req, res) => {
     const base64ModifiedPdf = arrayBufferToBase64(modifiedPdfBytes)
     return res.status(200).json(base64ModifiedPdf);
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      "status": "error",
+      "message": `${error.message}`,
+      "data": {}
+  });
   }
 };
 export { addDocument, signDocumentConglomerado, signDocumentTest };

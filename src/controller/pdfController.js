@@ -6,20 +6,44 @@ const getPdf = async (req, res) => {
     const { id } = req.params;
     const result = await documentPDF.findById({ _id: id });
     if (!result) {
-      return res.status(404).json({ message: "Registro no existe" });
+      return res.status(400).json({
+        "status": "error",
+        "message": `Documento no existe.`,
+        "data": {}
+    });
     }
-    return res.json(result);
+    return res.status(200).json({
+      "status": "success",
+      "message": `Documento encontrado.`,
+      "data": {
+        document: result
+      }
+  });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      "status": "error",
+      "message": `${error.message}`,
+      "data": {}
+  });
   }
 };
 
 const getPdfs = async (req, res) => {
   try {
     const result = await documentPDF.find();
-    return res.json(result);
+    return res.status(200).json({
+      "status": "success",
+      "message": `Documentos encontrados.`,
+      "data": {
+        documents: result
+      }
+  });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      "status": "error",
+      "message": `${error.message}`,
+      "data": {}
+  });
   }
 };
 
@@ -33,11 +57,18 @@ const getCLientsByRut = async (req, res) => {
       "Conglomerado":  false
     }
     if (!clients) {
-      return res.status(404).json({ message: "Cliente no encontrado" });
+      return res.status(400).json({
+        "status": "error",
+        "message": `Cliente no existe.`,
+        "data": {}
+    });
     }{
-      console.log(clients.documents)
       if(!clients.documents){
-        return res.status(404).json({ message: "Cliente no tiene documentos" });
+        return res.status(400).json({
+          "status": "error",
+          "message": `Cliente no tiene documentos.`,
+          "data": {}
+      });        
       }else{
         clients.documents.forEach((document)=>{
           if(document.typeDocument === "Contrato"){
@@ -52,9 +83,19 @@ const getCLientsByRut = async (req, res) => {
         })
       }
     }
-    return res.status(200).json({types});
+    return res.status(200).json({
+      "status": "success",
+      "message": `Cliente encontrado.`,
+      "data": {
+        types
+      }
+  });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      "status": "error",
+      "message": `${error.message}`,
+      "data": {}
+  });
   }
 }
 

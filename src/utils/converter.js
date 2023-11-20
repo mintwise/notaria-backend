@@ -32,17 +32,3 @@ export const arrayBufferToBase64 = (arrayBuffer) => {
   return btoa(binary);
 };
 
-export const compressDocument = async (base64Document) => {
-  return new Promise((resolve, reject) => {
-    const pdfBuffer = Buffer.from(base64Document, 'base64');
-    zlib.deflate(pdfBuffer, (err, compressedBuffer) => {
-      if (err) {
-        console.error('Error al comprimir el PDF:', err);
-        reject(err);
-      } else {
-        const compressedBase64PDF = compressedBuffer.toString('base64');
-        resolve(compressedBase64PDF);
-      }
-    });
-  });
-};
