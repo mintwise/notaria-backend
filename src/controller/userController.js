@@ -1,3 +1,4 @@
+import generarJWT from "../helpers/generarJWT.js";
 import User from "../model/User.js";
 
 const registrar = async (req, res) => {
@@ -50,7 +51,6 @@ const autenticar = async (req, res) => {
   if (await usuario.comprobarPassword(password)) {
     const { name, rut, role, email, _id, password } = usuario;
     const base64Password = Buffer.from(password, "utf-8").toString("base64");
-    console.log(base64Password);
     return res.status(200).json({
       status: "success",
       message: `Usuario autenticado correctamente.`,
@@ -61,6 +61,7 @@ const autenticar = async (req, res) => {
         role,
         email,
         password: base64Password,
+        token: generarJWT(usuario._id)
       },
     });
   } else {
@@ -74,8 +75,10 @@ const autenticar = async (req, res) => {
 };
 
 const nuevoPassword = async (req, res) => {
-  const { email, password } = req.body;
-  const user = await User.findOne({ email });
+  const {id}= req.params;
+  const { passwordActual, passwordNuevo } = req.body;
+
+  const user = await User.findById({_id: id });
   if (!user) {
     const error = new Error("usuario no existe");
     return res.status(403).json({
@@ -85,13 +88,23 @@ const nuevoPassword = async (req, res) => {
     });
   }
   // Cambiar la contraseña y guardarla en la base de datos
-  user.password = password;
-  await user.save();
-  return res.status(200).json({
-    status: "success",
-    message: `Contraseña actualizada correctamente.`,
-    data: {},
-  });
+  if(await user.comprobarPassword(passwordActual)){
+
+    user.password = passwordNuevo;
+    await user.save();
+    return res.status(200).json({
+      status: "success",
+      message: `Contraseña actualizada correctamente.`,
+      data: {},
+    });
+  }else{
+    const error = new Error("El Password Actual es incorrecto");
+    return res.status(403).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  }
 };
 
 export { registrar, autenticar, nuevoPassword };

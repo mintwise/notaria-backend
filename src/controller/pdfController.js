@@ -1,3 +1,4 @@
+import { generarId } from "../helpers/generarId.js";
 import Client from "../model/Clients.js";
 import documentPDF from "../model/Pdf.js";
 
@@ -33,7 +34,7 @@ const getPdfs = async (req, res) => {
     const result = await documentPDF.find();
     return res.status(200).json({
       "status": "success",
-      "message": `Documentos encontrados.`,
+      "message": `Documentos`,
       "data": {
         documents: result
       }
@@ -99,5 +100,27 @@ const getCLientsByRut = async (req, res) => {
   }
 }
 
+const getDocumentsCertificate = async (req,res)=>{
+  try {
+      const {state}= req.query;
+      console.log(state)
+      const documents = await documentPDF.find({state:state})
+      return res.status(200).json({
+        "status": "success",
+        "message": `Documentos Encontrados.`,
+        "data": {
+          documents
+        }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      "status": "error",
+      "message": `${error.message}`,
+      "data": {}
+  });
+  }
+}
 
-export { getPdf, getPdfs, getCLientsByRut };
+
+
+export { getPdf, getPdfs, getCLientsByRut, getDocumentsCertificate };

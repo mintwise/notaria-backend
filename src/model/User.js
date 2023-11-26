@@ -1,5 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import bcrypt from 'bcrypt';
+import { generarId } from "../helpers/generarId.js";
 
 const UserSchema = new mongoose.Schema({
     name: String,
@@ -17,6 +18,10 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    token: {
+        type: String,
+        default: generarId()
+    }
 })
 
 UserSchema.pre("save", async function (next){
@@ -28,8 +33,7 @@ UserSchema.pre("save", async function (next){
 })
 
 UserSchema.methods.comprobarPassword = async function (passwordFormulario){
-    const result = await bcrypt.compare(passwordFormulario, this.password)
-    return result;
+    return  await bcrypt.compare(passwordFormulario, this.password)
 }
 
 const User = mongoose.model('User', UserSchema, 'User');
