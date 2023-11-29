@@ -75,7 +75,7 @@ export const updateDocumentPdf = async (state, base64Sign, id) => {
   return await Pdf.findByIdAndUpdate({ _id: id }, document, { new: true });
 };
 
-export const saveDocumentPdf = async (documento,state,typeDocument, base64Document, filename) => {
+export const saveDocumentPdf = async (documento,state,typeDocument, base64Document, filename, canal) => {
     const documentPdfTemplate = new Pdf({
         nameResponsible: documento.nameResponsible,
         rutResponsible: documento.rutResponsible,
@@ -87,6 +87,7 @@ export const saveDocumentPdf = async (documento,state,typeDocument, base64Docume
         typeDocument: typeDocument,
         filenameDocument: filename,
         base64Document,
+        canal: canal ? canal : null
       })
   return await documentPdfTemplate.save();
 };

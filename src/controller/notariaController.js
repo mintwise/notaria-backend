@@ -3,7 +3,7 @@ import Client from "../model/Clients.js";
 import { arrayBufferToBase64, formatValue } from "../utils/converter.js";
 import { saveDocumentPdf } from "../helpers/index.js";
 import SignTemplate from "../model/SignTemplate.js";
-import { PDFDocument, error } from "pdf-lib";
+import { PDFDocument } from "pdf-lib";
 
 const addDocument = async (req, res) => {
   try {
@@ -18,7 +18,6 @@ const addDocument = async (req, res) => {
       base64Document,
       typeDocument,
     } = req.body;
-    //! validar por rut del cliente si existe documento tipo Contrato o conglomerado
     const client = await Client.findOne({ rutClient });
     if (client) {
       const isDocumentExists = client.documents.some(
@@ -39,20 +38,6 @@ const addDocument = async (req, res) => {
           "data": {}
       });
       }
-      if(client.rutClient === rutClient && typeDocument === "Contrato"){
-        return res.status(400).json({
-          "status": "error",
-          "message": `Ya tiene un contrato en el sistema.`,
-          "data": {}
-      });
-      }
-      if(client.rutClient === rutClient && typeDocument === "Conglomerado"){
-        return res.status(400).json({
-          "status": "error",
-          "message": `Ya tiene un conglomerado en el sistema.`,
-          "data": {}
-      });
-      }
     }
     // insertar en la bd Coleccion DocumentPDF
     const filename = formatValue(filenameDocument);
@@ -70,32 +55,54 @@ const addDocument = async (req, res) => {
       state(typeDocument),
       typeDocument,
       base64Document,
-      filename
-    );
-    // insertar en la bd Coleccion Clients
-    let documents = [];
-    documents.push({
-      _id: result._id,
       filename,
-      typeDocument,
-    });
-    const objectClient = new Client({
-      nameResponsible,
-      rutResponsible,
-      emailResponsible,
-      nameClient,
-      rutClient,
-      emailClient,
-      documents,
-    });
-    await objectClient.save();
-    return res.status(200).json({
-      "status": "success",
-      "message": `Documento agregado correctamente.`,
-      "data": {
-        document: objectClient
-      }
+      "interno"
+    );
+    if (!client) {
+      let documents = [];
+      documents.push({
+        _id: result._id,
+        filename,
+        typeDocument,
+      });
+      const objectClient = new Client({
+        nameResponsible,
+        rutResponsible,
+        emailResponsible,
+        nameClient,
+        rutClient,
+        emailClient,
+        documents,
+      })
+      await Client.create(objectClient);
+      return res.status(200).json({
+        status: "success",
+        message: `Documento agregado correctamente.`,
+        data: {
+          document: objectClient,
+        },
+      });
+    }
+    // insertar en la bd Coleccion Clients
+if(client.documents.length){
+
+  const document = {
+    _id: result._id,
+    filename,
+    typeDocument,
+  };
+  await Client.findOneAndUpdate(
+    { rutClient },
+    { $push: { documents: document } }
+  );
+  return res.status(200).json({
+    status: "success",
+    message: `Documento agregado correctamente.`,
+    data: {
+      document
+    },
   });
+}
   } catch (error) {
     return res.status(400).json({
       "status": "error",

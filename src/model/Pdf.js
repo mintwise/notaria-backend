@@ -33,6 +33,10 @@ const documentPDF = new mongoose.Schema(
     typeDocument: {
       type: String,
     },
+    canal: {
+      type: String,
+      default: null
+    }
   },
   {
     timestamps: true,

@@ -58,7 +58,8 @@ const addDocument = async (req, res) => {
       "Conglomerado Creado",
       typeDocument,
       base64Document,
-      filename
+      filename,
+      "interno"
     );
     // Cambia el estado del contrato a conglomerado
     contrato.state = "Conglomerado Creado";
@@ -108,7 +109,8 @@ const addDocument = async (req, res) => {
       "Pendiente Firma",
       "Conglomerado",
       base64conglomerado,
-      `${contrato.filenameDocument} - ${filename}`
+      `${contrato.filenameDocument} - ${filename}`,
+      "interno"
     );
     // agregamos el documento conglomerado al cliente
     const documentConglomeradoClient = {
