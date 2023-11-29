@@ -1,9 +1,7 @@
 import express from "express";
 import {
-  getCLientsByRut,
   getPdf,
   getPdfs,
-  getDocumentsCertificate
 } from "../controller/pdfController.js";
 import { autenticar, nuevoPassword, registrar } from "../controller/userController.js";
 import checkAuth from "../middleware/authMiddleware.js";
@@ -13,9 +11,8 @@ router.post('/registrar',registrar);
 router.post('/login', autenticar);
 router.post('/reset-password/:id', nuevoPassword)
 // area publica documentos
-router.route("/document/:id").get(getPdf);
+router.route("/document/:id").get(checkAuth, getPdf);
 router.get("/documents",checkAuth, getPdfs);
-router.get("/clients/:rut", getCLientsByRut);
 
 export default router;
 
