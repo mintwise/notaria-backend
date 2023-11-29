@@ -14,20 +14,10 @@ const app = express();
 // Connect a la BD
 connectDB();
 // MIDDLEWARES 
-const dominios = [process.env.FRONTEND_URL]
-const corsOptions = {
-  origin: function(origin,callback){
-      // esto valida que los dominios permitidos sean los que estan en el array
-      if (!origin || dominios.indexOf(origin) !== -1){
-          // el origen del request esta permitido
-          callback(null,true)
-      }else{
-          callback(new Error('Dominio no permitido por CORS'))
-      }
-  }
-}
 app.use(
-  cors(corsOptions)
+  cors({
+    origin:"*"
+  })
 );
 app.use(express.json({ limit: "50mb", extended: true }));
 app.use(
