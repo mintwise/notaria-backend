@@ -73,6 +73,7 @@ const addDocumentApi = async (req, res) => {
         status: "success",
         message: `Documento agregado correctamente.`,
         data: {
+          id: objectClient.documents[0]._id,
           filename: objectClient.documents[0].filename,
           typeDocument: objectClient.documents[0].typeDocument,
         },
@@ -105,6 +106,7 @@ const addDocumentApi = async (req, res) => {
         status: "success",
         message: `Documento agregado correctamente.`,
         data: {
+          id: document._id,
           filename: document.filename,
           typeDocument: document.typeDocument,
         },
@@ -128,13 +130,14 @@ const getCertificatesDocuments = async (req, res) => {
         data: {},
       });
     }
-    const documents = await documentPDF.find({ state: "Certificado" });
+    const { id } = req.query;
+    const document = await documentPDF.findById({ _id: id });
 
     return res.status(200).json({
-      status: "success",
+      status: "200",
       message: `Documentos Certificados.`,
       data: {
-        documents,
+        document,
       },
     });
   } catch (error) {

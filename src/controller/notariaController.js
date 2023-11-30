@@ -19,6 +19,13 @@ const addDocument = async (req, res) => {
       typeDocument,
     } = req.body;
     const client = await Client.findOne({ rutClient });
+    if (req.user.role === "API") {
+      return res.status(400).json({
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
+    }
     if (client) {
       const isDocumentExists = client.documents.some(
         (document) => document.typeDocument === typeDocument
@@ -26,17 +33,17 @@ const addDocument = async (req, res) => {
 
       if (isDocumentExists) {
         return res.status(400).json({
-          "status": "error",
-          "message": `${typeDocument} ya existe en el sistema.`,
-          "data": {}
-      });
+          status: "error",
+          message: `${typeDocument} ya existe en el sistema.`,
+          data: {},
+        });
       }
       if (typeDocument === "Poliza") {
         return res.status(400).json({
-          "status": "error",
-          "message": `No puede agregar una poliza en esta sección.`,
-          "data": {}
-      });
+          status: "error",
+          message: `No puede agregar una poliza en esta sección.`,
+          data: {},
+        });
       }
     }
     // insertar en la bd Coleccion DocumentPDF
@@ -73,7 +80,7 @@ const addDocument = async (req, res) => {
         rutClient,
         emailClient,
         documents,
-      })
+      });
       await Client.create(objectClient);
       return res.status(200).json({
         status: "success",
@@ -84,31 +91,30 @@ const addDocument = async (req, res) => {
       });
     }
     // insertar en la bd Coleccion Clients
-if(client.documents.length){
-
-  const document = {
-    _id: result._id,
-    filename,
-    typeDocument,
-  };
-  await Client.findOneAndUpdate(
-    { rutClient },
-    { $push: { documents: document } }
-  );
-  return res.status(200).json({
-    status: "success",
-    message: `Documento agregado correctamente.`,
-    data: {
-      document
-    },
-  });
-}
+    if (client.documents.length) {
+      const document = {
+        _id: result._id,
+        filename,
+        typeDocument,
+      };
+      await Client.findOneAndUpdate(
+        { rutClient },
+        { $push: { documents: document } }
+      );
+      return res.status(200).json({
+        status: "success",
+        message: `Documento agregado correctamente.`,
+        data: {
+          document,
+        },
+      });
+    }
   } catch (error) {
     return res.status(400).json({
-      "status": "error",
-      "message": `${error.message}`,
-      "data": {}
-  });
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
   }
 };
 
@@ -118,13 +124,20 @@ const generarConglomeradoTemplate = async (req, res) => {
   const { id } = req.params;
   try {
     const documentoFirma = await documentPDF.findOne({ _id: id });
-    const documentoPlantilla = await SignTemplate.findOne({idDocument: id})
-    if(!documentoFirma && !documentoPlantilla){
+    const documentoPlantilla = await SignTemplate.findOne({ idDocument: id });
+    if (req.user.role === "API") {
       return res.status(400).json({
-        "status": "error",
-        "message": `Documento no existe.`,
-        "data": {}
-    });
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
+    }
+    if (!documentoFirma && !documentoPlantilla) {
+      return res.status(400).json({
+        status: "error",
+        message: `Documento no existe.`,
+        data: {},
+      });
     }
     const conglomeradoPDF = await PDFDocument.create();
 
@@ -146,85 +159,100 @@ const generarConglomeradoTemplate = async (req, res) => {
     // Copiar todas las páginas del segundo documento si tiene una o más
     const pageIndices2 = documentTemplate.getPageIndices();
     for (const pageIndex of pageIndices2) {
-      const [donorPage] = await conglomeradoPDF.copyPages(documentTemplate, [pageIndex]);
+      const [donorPage] = await conglomeradoPDF.copyPages(documentTemplate, [
+        pageIndex,
+      ]);
       conglomeradoPDF.addPage(donorPage);
     }
     const pdfBytes = await conglomeradoPDF.save();
     const base64conglomerado = arrayBufferToBase64(pdfBytes);
     return res.status(200).json({
-      "status": "error",
-      "message": `Documento generado correctamente.`,
-      "data": {
-        base64conglomerado
-      }
-  });
+      status: "error",
+      message: `Documento generado correctamente.`,
+      data: {
+        base64conglomerado,
+      },
+    });
   } catch (error) {
     return res.status(400).json({
-      "status": "error",
-      "message": `${error.message}`,
-      "data": {}
-  });
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
   }
 };
 
-const changeStateConglomerado = async (req,res) => {
+const changeStateConglomerado = async (req, res) => {
   // base64 del documento en el body
   const { id } = req.params;
   const { base64 } = req.body;
   // actualizar el estado del documento conglomerado
   try {
     const document = await documentPDF.findOne({ _id: id });
-  if (!document) {
-    return res.status(500).json({
-      "status": "error",
-      "message": `Registro no existe.`,
-      "data": {}
-  });
-  }
-  if(document.state === "Certificado"){
-    return res.status(500).json({
-      "status": "error",
-      "message": `Documento ya esta certificado.`,
-      "data": {}
-  });
-  }
-  if(document.state === "Pendiente Firma"){
-    return res.status(400).json({
-      "status": "error",
-      "message": `Documento no esta firmado.`,
-      "data": {}
-  });
-  }
-  if(document.state === "Pendiente Certificación"){
-    // actualizar el estado de el documento solo
-    const documentCertificate = {
-      base64Document: base64,
-      state: "Certificado",
+    if (req.user.role === "API") {
+      return res.status(400).json({
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
     }
-    await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, { new: true });
-    // actualizar el documento del cliente 
-    const client = await Client.findOne({ rutClient: document.rutClient});
-    const clientState = client.documents.map(document=>{
-      if(document._id == id){
-        document.state = "Certificado"
-      }
-      return document
-    })
-    await Client.findOneAndUpdate({ rutClient: document.rutClient}, {documents: clientState}, { new: true });
-    return res.status(200).json({
-      "status": "success",
-      "message": `Documento Certificado.`,
-      "data": {
-        documentCertificate
-      }
-  });
-  }
+    if (!document) {
+      return res.status(500).json({
+        status: "error",
+        message: `Registro no existe.`,
+        data: {},
+      });
+    }
+    if (document.state === "Certificado") {
+      return res.status(500).json({
+        status: "error",
+        message: `Documento ya esta certificado.`,
+        data: {},
+      });
+    }
+    if (document.state === "Pendiente Firma") {
+      return res.status(400).json({
+        status: "error",
+        message: `Documento no esta firmado.`,
+        data: {},
+      });
+    }
+    if (document.state === "Pendiente Certificación") {
+      // actualizar el estado de el documento solo
+      const documentCertificate = {
+        base64Document: base64,
+        state: "Certificado",
+      };
+      await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
+        new: true,
+      });
+      // actualizar el documento del cliente
+      const client = await Client.findOne({ rutClient: document.rutClient });
+      const clientState = client.documents.map((document) => {
+        if (document._id == id) {
+          document.state = "Certificado";
+        }
+        return document;
+      });
+      await Client.findOneAndUpdate(
+        { rutClient: document.rutClient },
+        { documents: clientState },
+        { new: true }
+      );
+      return res.status(200).json({
+        status: "success",
+        message: `Documento Certificado.`,
+        data: {
+          documentCertificate,
+        },
+      });
+    }
   } catch (error) {
     return res.status(400).json({
-      "status": "error",
-      "message": `${error.message}`,
-      "data": {}
-  });
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
   }
 };
 export { addDocument, generarConglomeradoTemplate, changeStateConglomerado };

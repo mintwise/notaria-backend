@@ -49,7 +49,14 @@ const addDocument = async (req, res) => {
       });
       return;
   }
-    // función que formatea el nombre del documento
+  if (req.user.role === "API") {
+    return res.status(400).json({
+      status: "error",
+      message: `No tiene permisos para realizar esta acción.`,
+      data: {},
+    });
+  }
+  // función que formatea el nombre del documento
     const filename = formatValue(filenameDocument);
     //inserta la póliza en la bd PDF
 
@@ -141,6 +148,13 @@ const signDocumentConglomerado = async (req, res) => {
   const { id } = req.params;
   const user = await User.findOne({ email });
   const conglomeradoDoc = await Pdf.findById({ _id: id });
+  if (req.user.role === "API") {
+    return res.status(400).json({
+      status: "error",
+      message: `No tiene permisos para realizar esta acción.`,
+      data: {},
+    });
+  }
   if (!user) {
     return res.status(400).json({
       "status": "error",
@@ -155,6 +169,7 @@ const signDocumentConglomerado = async (req, res) => {
       "data": {}
   });
   }
+  autenticarRol(req.user.role);
   const signatureInfo = {
     Alvaro: {
       signPage7: {
@@ -466,6 +481,13 @@ const signDocumentTest = async (req, res) => {
   try {
     // Cargar la plantilla de documento
     const { image } = req.body;
+    if (req.user.role === "API") {
+      return res.status(400).json({
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
+    }
     const template = await DocumentTemplate.findOne({
       typeDocument: "Template",
     });
