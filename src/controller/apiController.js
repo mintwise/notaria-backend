@@ -132,7 +132,13 @@ const getCertificatesDocuments = async (req, res) => {
     }
     const { id } = req.query;
     const document = await documentPDF.findById({ _id: id });
-
+    if (!document) {
+      return res.status(400).json({
+        status: "error",
+        message: `No existe el documento.`,
+        data: {},
+      });
+    }
     return res.status(200).json({
       status: "200",
       message: `Documentos Certificados.`,

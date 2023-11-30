@@ -169,7 +169,6 @@ const signDocumentConglomerado = async (req, res) => {
       "data": {}
   });
   }
-  autenticarRol(req.user.role);
   const signatureInfo = {
     Alvaro: {
       signPage7: {

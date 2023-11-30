@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  getCLientsByRut,
   getPdf,
   getPdfs,
 } from "../controller/pdfController.js";
@@ -13,6 +14,7 @@ router.post('/reset-password/:id', nuevoPassword)
 // area publica documentos
 router.route("/document/:id").get(checkAuth, getPdf);
 router.get("/documents",checkAuth, getPdfs);
+router.get("/get-clients-by-rut", checkAuth, getCLientsByRut)
 
 export default router;
 

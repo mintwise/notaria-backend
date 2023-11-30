@@ -65,7 +65,6 @@ const getPdfs = async (req, res) => {
 
 const getCLientsByRut = async (req, res) => {
   try {
-    const { rut } = req.params;
     if (req.user.role === "API") {
       return res.status(400).json({
         status: "error",
@@ -73,6 +72,7 @@ const getCLientsByRut = async (req, res) => {
         data: {},
       });
     }
+    const { rut } = req.query;
     const clients = await Client.findOne({ rutClient: rut });
     const types = {
       Contrato: false,
