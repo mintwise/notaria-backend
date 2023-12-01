@@ -27,17 +27,6 @@ const addDocument = async (req, res) => {
       });
     }
     if (client) {
-      const isDocumentExists = client.documents.some(
-        (document) => document.typeDocument === typeDocument
-      );
-
-      if (isDocumentExists) {
-        return res.status(400).json({
-          status: "error",
-          message: `${typeDocument} ya existe en el sistema.`,
-          data: {},
-        });
-      }
       if (typeDocument === "Poliza") {
         return res.status(400).json({
           status: "error",
