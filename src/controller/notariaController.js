@@ -183,11 +183,11 @@ const generarConglomeradoTemplate = async (req, res) => {
 };
 
 const changeStateConglomerado = async (req, res) => {
-  // base64 del documento en el body
-  const { id } = req.params;
-  const { base64 } = req.body;
-  // actualizar el estado del documento conglomerado
   try {
+    // base64 del documento en el body
+    const { id } = req.params;
+    const { base64 } = req.body;
+    // actualizar el estado del documento conglomerado
     const document = await documentPDF.findOne({ _id: id });
     if (req.user.role === "API") {
       return res.status(400).json({
@@ -223,13 +223,13 @@ const changeStateConglomerado = async (req, res) => {
         base64Document: base64,
         state: "Certificado",
       };
-      await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
+      const result = await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
         new: true,
       });
       // actualizar el documento del cliente
-      const client = await Client.findOne({ rutClient: document.rutClient });
+      const client = await Client.findOne({ rutClient: result.rutClient });
       const clientState = client.documents.map((document) => {
-        if (document._id == id) {
+        if (document._id == result._id) {
           document.state = "Certificado";
         }
         return document;
