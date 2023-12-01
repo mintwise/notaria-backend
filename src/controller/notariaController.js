@@ -223,22 +223,10 @@ const changeStateConglomerado = async (req, res) => {
         base64Document: base64,
         state: "Certificado",
       };
-      const result = await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
+       await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
         new: true,
       });
       // actualizar el documento del cliente
-      const client = await Client.findOne({ rutClient: result.rutClient });
-      const clientState = client.documents.map((document) => {
-        if (document._id == result._id) {
-          document.state = "Certificado";
-        }
-        return document;
-      });
-      await Client.findOneAndUpdate(
-        { rutClient: document.rutClient },
-        { documents: clientState },
-        { new: true }
-      );
       return res.status(200).json({
         status: "success",
         message: `Documento Certificado.`,
