@@ -167,7 +167,7 @@ const generarConglomeradoTemplate = async (req, res) => {
     const pdfBytes = await conglomeradoPDF.save();
     const base64conglomerado = arrayBufferToBase64(pdfBytes);
     return res.status(200).json({
-      status: "error",
+      status: "success",
       message: `Documento generado correctamente.`,
       data: {
         base64conglomerado,
