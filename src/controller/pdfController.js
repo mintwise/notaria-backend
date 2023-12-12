@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { generarId } from "../helpers/generarId.js";
 import Client from "../model/Clients.js";
 import documentPDF from "../model/Pdf.js";
@@ -150,4 +151,45 @@ const getDocumentsCertificate = async (req, res) => {
     });
   }
 };
-export { getPdf, getPdfs, getCLientsByRut, getDocumentsCertificate };
+
+const deleteDocument = async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (req.user.role === "API") {
+      return res.status(400).json({
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
+    }
+    const document = await documentPDF.findByIdAndDelete({ _id: id });
+    const objectId = new mongoose.Types.ObjectId(id);
+    await Client.updateMany({}, { $pull: { documents: { _id: objectId } } });
+
+    if (!document) {
+      return res.status(400).json({
+        status: "error",
+        message: `Documento no existe.`,
+        data: {},
+      });
+    }
+    return res.status(200).json({
+      status: "success",
+      message: `Documento eliminado.`,
+      data: {},
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  }
+};
+export {
+  getPdf,
+  getPdfs,
+  getCLientsByRut,
+  getDocumentsCertificate,
+  deleteDocument,
+};

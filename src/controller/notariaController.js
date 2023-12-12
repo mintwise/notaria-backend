@@ -19,6 +19,7 @@ const addDocument = async (req, res) => {
       typeDocument,
     } = req.body;
     const client = await Client.findOne({ rutClient });
+    const documentPdf = await documentPDF.findOne({ rutClient });
     if (req.user.role === "API") {
       return res.status(400).json({
         status: "error",
@@ -46,15 +47,15 @@ const addDocument = async (req, res) => {
       }
     };
 
-    const result = await saveDocumentPdf(
-      req.body,
-      state(typeDocument),
-      typeDocument,
-      base64Document,
-      filename,
-      "interno"
-    );
     if (!client) {
+      const result = await saveDocumentPdf(
+        req.body,
+        state(typeDocument),
+        typeDocument,
+        base64Document,
+        filename,
+        "interno"
+      );
       let documents = [];
       documents.push({
         _id: result._id,
@@ -80,7 +81,24 @@ const addDocument = async (req, res) => {
       });
     }
     // insertar en la bd Coleccion Clients
-    if (client.documents.length) {
+    if ( client.documents.length >= 0) {
+      // verificar si el cliente ya tiene un documento con el mismo tipo de documento
+      const documentContract = client.documents.some(document => document.typeDocument === "Contrato");
+      if (documentContract) {
+        return res.status(400).json({
+          status: "error",
+          message: `El cliente ya tiene un Contrato.`,
+          data: {},
+        });
+      }
+      const result = await saveDocumentPdf(
+        req.body,
+        state(typeDocument),
+        typeDocument,
+        base64Document,
+        filename,
+        "interno"
+      );
       const document = {
         _id: result._id,
         filename,
