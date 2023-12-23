@@ -1,9 +1,13 @@
 import documentPDF from "../model/Pdf.js";
 import Client from "../model/Clients.js";
-import { arrayBufferToBase64, formatValue } from "../utils/converter.js";
+import {
+  arrayBufferToBase64,
+  formatDate,
+  formatValue,
+} from "../utils/converter.js";
 import { saveDocumentPdf } from "../helpers/index.js";
-import SignTemplate from "../model/SignTemplate.js";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
+import DocumentTemplate from "../model/DocumentTemplate.js";
 
 const addDocument = async (req, res) => {
   try {
@@ -76,14 +80,16 @@ const addDocument = async (req, res) => {
         status: "success",
         message: `Documento agregado correctamente.`,
         data: {
-          document: objectClient,
+          result,
         },
       });
     }
     // insertar en la bd Coleccion Clients
-    if ( client.documents.length >= 0) {
+    if (client.documents.length >= 0) {
       // verificar si el cliente ya tiene un documento con el mismo tipo de documento
-      const documentContract = client.documents.some(document => document.typeDocument === "Contrato");
+      const documentContract = client.documents.some(
+        (document) => document.typeDocument === "Contrato"
+      );
       if (documentContract) {
         return res.status(400).json({
           status: "error",
@@ -112,7 +118,7 @@ const addDocument = async (req, res) => {
         status: "success",
         message: `Documento agregado correctamente.`,
         data: {
-          document,
+          result,
         },
       });
     }
@@ -131,7 +137,9 @@ const generarConglomeradoTemplate = async (req, res) => {
   const { id } = req.params;
   try {
     const documentoFirma = await documentPDF.findOne({ _id: id });
-    const documentoPlantilla = await SignTemplate.findOne({ idDocument: id });
+    const documentoPlantilla = await DocumentTemplate.findById({
+      _id: "654aeb3c674c514b13ade18d",
+    });
     if (req.user.role === "API") {
       return res.status(400).json({
         status: "error",
@@ -171,6 +179,7 @@ const generarConglomeradoTemplate = async (req, res) => {
       ]);
       conglomeradoPDF.addPage(donorPage);
     }
+
     const pdfBytes = await conglomeradoPDF.save();
     const base64conglomerado = arrayBufferToBase64(pdfBytes);
     return res.status(200).json({
@@ -224,13 +233,31 @@ const changeStateConglomerado = async (req, res) => {
         data: {},
       });
     }
-    if (document.state === "Pendiente Certificación") {
+    if (!document.state !== "Pendiente Certificación") {
       // actualizar el estado de el documento solo
+      // Obtener la última página
+      const documentC = await PDFDocument.load(Buffer.from(base64, "base64"));
+
+      const pages = documentC.getPages();
+      const lastPage = pages[pages.length - 1];
+
+      // Agregar la firma en la última página
+      const date = formatDate();
+      lastPage.drawText(date, {
+        x: 115,
+        y: 553,
+        size: 12,
+        font: await documentC.embedFont("Helvetica"),
+        color: rgb(0, 0, 0),
+      });
+      // Guardar el documento
+      const pdfBytes = await documentC.save();
+      const base64Document = Buffer.from(pdfBytes).toString("base64");
       const documentCertificate = {
-        base64Document: base64,
+        base64Document,
         state: "Certificado",
       };
-       await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
+      await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
         new: true,
       });
       // actualizar el documento del cliente

@@ -32,3 +32,30 @@ export const arrayBufferToBase64 = (arrayBuffer) => {
   return btoa(binary);
 };
 
+
+export const formatDate = () => {
+  const date = new Date();
+  const day = date.getDate();
+  const year = date.getFullYear();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const seconds = date.getSeconds();
+
+  const months = [
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
+  ];
+  const month = months[date.getMonth()];
+
+  return `El ${day} de ${month} del ${year}, a las ${hours}:${minutes}:${seconds} Horas.`;
+};
