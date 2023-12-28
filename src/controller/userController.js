@@ -61,7 +61,8 @@ const autenticar = async (req, res) => {
         role,
         email,
         password: base64Password,
-        token: generarJWT(usuario._id)
+        token: generarJWT(usuario._id),
+        inmobiliariaName: usuario.inmobiliariaName
       },
     });
   } else {

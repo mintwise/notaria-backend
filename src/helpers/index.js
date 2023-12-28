@@ -1,6 +1,6 @@
 import Pdf from "../model/Pdf.js";
 import { rgb } from "pdf-lib";
-import { arrayBufferToBase64, formatDateToDDMMYYYY } from "../utils/converter.js";
+import { arrayBufferToBase64 } from "../utils/converter.js";
 
 export const signDocument = async (
   pages,

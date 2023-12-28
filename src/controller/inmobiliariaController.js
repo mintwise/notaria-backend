@@ -12,16 +12,19 @@ import Client from "../model/Clients.js";
 import Pdf from "../model/Pdf.js";
 import User from "../model/User.js";
 import DocumentTemplate from "../model/DocumentTemplate.js";
-import SignTemplate from "../model/SignTemplate.js";
+import InmobiliariaUser from "../model/InmobiliariaUser.js";
+import mongoose from "mongoose";
 
 const addDocument = async (req, res) => {
   // validar por rut del cliente si existe póliza para realizar conglomerado
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { rutClient, filenameDocument, typeDocument, base64Document } =
       req.body;
-    const client = await Client.findOne({ rutClient });
-    const contrato = await Pdf.findOne({ rutClient, typeDocument: "Contrato" });
-    const poliza = await Pdf.findOne({ rutClient, typeDocument: "Poliza" });
+    const client = await Client.findOne({ rutClient }).session(session);
+    const contrato = await Pdf.findOne({ rutClient, typeDocument: "Contrato" }).session(session);
+    const poliza = await Pdf.findOne({ rutClient, typeDocument: "Poliza" }).session(session);
     if (!client) {
       res.status(400).json({
         status: "error",
@@ -77,7 +80,7 @@ const addDocument = async (req, res) => {
     await Client.updateOne(
       { rutClient },
       { $push: { documents: polizaDocumentClient } }
-    );
+    ).session(session);
     //* realiza la operación de conglomerado
     // extraemos la información de los Pdfs
     const contratoPDF = await PDFDocument.load(
@@ -125,370 +128,254 @@ const addDocument = async (req, res) => {
     await Client.updateOne(
       { rutClient },
       { $push: { documents: documentConglomeradoClient } }
-    );
+    ).session(session);
+
+    await session.commitTransaction();
     return res.status(200).json({
       status: "success",
       message: `Creado con éxito.`,
       data: documentConglomerado,
     });
   } catch (error) {
+    session.abortTransaction();
+    return res.status(500).json({
+
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  }finally{
+    session.endSession();
+  }
+};
+const signDocumentConglomerado = async (req, res) => {
+  const { signOne, email } = req.body;
+  const { id } = req.params;
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const user = await User.findOne({ email }).session(session);
+    const conglomeradoDoc = await Pdf.findById({ _id: id }).session(session);
+    if (req.user.role === "API") {
+      return res.status(400).json({
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
+    }
+    if (!user) {
+      return res.status(400).json({
+        status: "error",
+        message: `Usuario no existe.`,
+        data: {},
+      });
+    }
+    if (!conglomeradoDoc) {
+      return res.status(400).json({
+        status: "error",
+        message: `Documento no existe.`,
+        data: {},
+      });
+    }
+    // objetos con la informacion de las firmas de los usuarios
+    const signatureInfo = {
+      1: {
+        sign: {
+          position: { x: 60, y: 610 },
+          namePosition: { x: 145, y: 640 },
+          rutPosition: { x: 320, y: 640 },
+          repPosition: { x: 225, y: 598 },
+        },
+      },
+      2: {
+        sign: {
+          position: { x: 60, y: 450 },
+          namePosition: { x: 145, y: 490 },
+          rutPosition: { x: 320, y: 490 },
+          repPosition: { x: 225, y: 448 },
+        },
+      },
+    };
+    const userInmobiliaria = await InmobiliariaUser.findOne({
+      name: user.name.toString(),
+    }).session(session);
+    //* extraer los datos
+    const documentConglomerado = await PDFDocument.load(
+      Buffer.from(conglomeradoDoc.base64Document, "base64")
+    );
+    const state = conglomeradoDoc.state;
+    switch (state) {
+      case "Pendiente Firma":
+        if (userInmobiliaria.role === 1) {
+          const imageSignOne = await documentConglomerado.embedPng(signOne);
+          const signOneDims = imageSignOne.scale(0.1);
+          // Agregamos el template al documento actual
+          const templateFirmas = await DocumentTemplate.findById({
+            _id: "657a364d9684fafba671a490",
+          }).session(session);
+          const base64TemplateFirma = await PDFDocument.load(
+            Buffer.from(templateFirmas.base64Document, "base64")
+          );
+          const [templatePage] = await documentConglomerado.copyPages(
+            base64TemplateFirma,
+            [0]
+          );
+          documentConglomerado.addPage(templatePage);
+          // obtener las paginas del documento
+          const pages = documentConglomerado.getPages();
+          //* firma de la pagina 8
+          const base64SignOne = await signDocument(
+            pages,
+            imageSignOne,
+            signOneDims,
+            signatureInfo[1],
+            documentConglomerado,
+            user,
+            "contrato"
+          );
+          // guardar en pdf en la bd y el cliente
+          const result = await updateDocumentPdf(
+            "Pendiente Firma 2",
+            base64SignOne,
+            id,
+            conglomeradoDoc
+          );
+          await session.commitTransaction();
+          //* Buscamos el template en la bd y lo creamos
+          return res.status(200).json({
+            status: "success",
+            message: `Firma 1 Realizada con éxito.`,
+            data: {
+              result,
+            },
+          });
+        }
+        if (userInmobiliaria.role === 2) {
+          // firmo el segundo
+          // creamos el template en la bd por primera vez
+          // pendiente firma 1
+          const imageSignTwo = await documentConglomerado.embedPng(signOne);
+          const signTwoDims = imageSignTwo.scale(0.1);
+          // Agregamos el template al documento actual
+          const templateFirmas = await DocumentTemplate.findById({
+            _id: "657a364d9684fafba671a490",
+          }).session(session);
+          const base64TemplateFirma = await PDFDocument.load(
+            Buffer.from(templateFirmas.base64Document, "base64")
+          );
+          const [templatePage] = await documentConglomerado.copyPages(
+            base64TemplateFirma,
+            [0]
+          );
+          documentConglomerado.addPage(templatePage);
+          // obtener las paginas del documento
+          const pages = documentConglomerado.getPages();
+          const base64SignTwo = await signDocument(
+            pages,
+            imageSignTwo,
+            signTwoDims,
+            signatureInfo[2],
+            documentConglomerado,
+            user,
+            "contrato"
+          );
+          // guardar en pdf en la bd y el cliente
+          const result = await updateDocumentPdf(
+            "Pendiente Firma 1",
+            base64SignTwo,
+            id,
+            conglomeradoDoc
+          );
+          //* Creación del template
+          await session.commitTransaction();
+          return res.status(200).json({
+            status: "success",
+            message: `Firma 2 Realizada con éxito.`,
+            data: {
+              result,
+            },
+          });
+        }
+        break;
+      case "Pendiente Firma 1":
+          // firmar documento con firma 1
+          const imageSignOne = await documentConglomerado.embedPng(
+            Buffer.from(signOne, "base64")
+          );
+          const signOneDims = imageSignOne.scale(0.1);
+          const pages = documentConglomerado.getPages();
+          const base64SignOne = await signDocument(
+            pages,
+            imageSignOne,
+            signOneDims,
+            signatureInfo[1],
+            documentConglomerado,
+            user,
+            "contrato"
+          );
+          // guardar en pdf en la bd y el cliente
+          const result = await updateDocumentPdf(
+            "Pendiente Certificación",
+            base64SignOne,
+            id,
+            conglomeradoDoc
+          );
+          await session.commitTransaction();
+          return res.status(200).json({
+            status: "success",
+            message: `Firma 1 Realizada con éxito.`,
+            data: {
+              result,
+            },
+          });
+      case "Pendiente Firma 2":
+          // firmar documento con firma 1
+          const imageSignTwo = await documentConglomerado.embedPng(
+            Buffer.from(signOne, "base64")
+          );
+          const signTwoDims = imageSignTwo.scale(0.1);
+          const pages2 = documentConglomerado.getPages();
+          const base64SignTwo = await signDocument(
+            pages2,
+            imageSignTwo,
+            signTwoDims,
+            signatureInfo[2],
+            documentConglomerado,
+            user,
+            "contrato"
+          );
+          // guardar en pdf en la bd y el cliente
+          const result2 = await updateDocumentPdf(
+            "Pendiente Certificación",
+            base64SignTwo,
+            id,
+            conglomeradoDoc,
+          );
+          await session.commitTransaction();
+          return res.status(200).json({
+            status: "success",
+            message: `Firma 2 Realizada con éxito.`,
+            data: {
+              result2,
+            },
+          });
+    }
+  } catch (error) {
+    await session.abortTransaction();
     return res.status(500).json({
       status: "error",
       message: `${error.message}`,
       data: {},
     });
+  }finally{
+    await session.endSession();
   }
-};
-const signDocumentConglomerado = async (req, res) => {
-  const { signOne, email } = req.body;
 
-  const { id } = req.params;
-  const user = await User.findOne({ email });
-  const conglomeradoDoc = await Pdf.findById({ _id: id });
-  if (req.user.role === "API") {
-    return res.status(400).json({
-      status: "error",
-      message: `No tiene permisos para realizar esta acción.`,
-      data: {},
-    });
-  }
-  if (!user) {
-    return res.status(400).json({
-      status: "error",
-      message: `Usuario no existe.`,
-      data: {},
-    });
-  }
-  if (!conglomeradoDoc) {
-    return res.status(400).json({
-      status: "error",
-      message: `Documento no existe.`,
-      data: {},
-    });
-  }
-  // objetos con la informacion de las firmas de los usuarios
-  const signatureInfo = {
-    Alvaro: {
-      sign: {
-        position: { x: 60, y: 610 },
-        namePosition: { x: 145, y: 640 },
-        rutPosition: { x: 320, y: 640 },
-        repPosition: { x: 225, y: 598 },
-      },
-    },
-    Javier: {
-      sign: {
-        position: { x: 60, y: 450 },
-        namePosition: { x: 145, y: 490 },
-        rutPosition: { x: 320, y: 490 },
-        repPosition: { x: 225, y: 448 },
-      },
-    },
-  };
-  const nameWithoutLastName = user.name.split(" ")[0];
-  const userInfo = signatureInfo[nameWithoutLastName];
-  //* extraer los datos
-  const documentConglomerado = await PDFDocument.load(
-    Buffer.from(conglomeradoDoc.base64Document, "base64")
-  );
-  const state = conglomeradoDoc.state;
-
-  switch (state) {
-    case "Pendiente Firma":
-      if (nameWithoutLastName === "Alvaro") {
-        const imageSignOne = await documentConglomerado.embedPng(signOne);
-        const signOneDims = imageSignOne.scale(0.1);
-        // Agregamos el template al documento actual
-        const templateFirmas = await DocumentTemplate.findById({
-          _id: "657a364d9684fafba671a490",
-        });
-        const base64TemplateFirma = await PDFDocument.load(
-          Buffer.from(templateFirmas.base64Document, "base64")
-        );
-        const [templatePage] = await documentConglomerado.copyPages(
-          base64TemplateFirma,
-          [0]
-        );
-        documentConglomerado.addPage(templatePage);
-        // obtener las paginas del documento
-        const pages = documentConglomerado.getPages();
-        //* firma de la pagina 8
-        const base64SignOne = await signDocument(
-          pages,
-          imageSignOne,
-          signOneDims,
-          userInfo,
-          documentConglomerado,
-          user,
-          "contrato"
-        );
-        // guardar en pdf en la bd y el cliente
-        const result = await updateDocumentPdf(
-          "Pendiente Firma 2",
-          base64SignOne,
-          id,
-          conglomeradoDoc
-        );
-        //* Buscamos el template en la bd y lo creamos
-        // const template = await DocumentTemplate.findOne({
-        //   typeDocument: "Template",
-        // });
-        // if (!template) {
-        //   return res.status(400).json({
-        //     status: "error",
-        //     message: `No existe el template.`,
-        //     data: {},
-        //   });
-        // }
-        // const base64Template = await PDFDocument.load(
-        //   Buffer.from(template.base64Document, "base64")
-        // );
-        // //* Se realiza el proceso de firma del template
-        // const [page] = base64Template.getPages();
-
-        // const imageSign1 = await base64Template.embedPng(signOne);
-        // const imageSign1Dims = imageSign1.scale(0.1);
-        // const base64TemplateSignOne = await signDocument(
-        //   page,
-        //   imageSign1,
-        //   imageSign1Dims,
-        //   userInfo,
-        //   base64Template,
-        //   user,
-        //   "template"
-        // );
-        // // y lo guardo en la bd en otra colección asociado
-        // const signTemplate = new SignTemplate({
-        //   idDocument: result._id,
-        //   base64Document: base64TemplateSignOne,
-        // });
-        // await signTemplate.save();
-        return res.status(200).json({
-          status: "success",
-          message: `Firma 1 Realizada con éxito.`,
-          data: {
-            result
-          },
-        });
-      }
-      if (nameWithoutLastName === "Javier") {
-        // firmo el segundo
-        // creamos el template en la bd por primera vez
-        // pendiente firma 1
-        const imageSignTwo = await documentConglomerado.embedPng(signOne);
-        const signTwoDims = imageSignTwo.scale(0.1);
-        // Agregamos el template al documento actual
-        const templateFirmas = await DocumentTemplate.findById({
-          _id: "657a364d9684fafba671a490",
-        });
-        const base64TemplateFirma = await PDFDocument.load(
-          Buffer.from(templateFirmas.base64Document, "base64")
-        );
-        const [templatePage] = await documentConglomerado.copyPages(
-          base64TemplateFirma,
-          [0]
-        );
-        documentConglomerado.addPage(templatePage);
-        // obtener las paginas del documento
-        const pages = documentConglomerado.getPages();
-        const base64SignTwo = await signDocument(
-          pages,
-          imageSignTwo,
-          signTwoDims,
-          userInfo,
-          documentConglomerado,
-          user,
-          "contrato"
-        );
-        // guardar en pdf en la bd y el cliente
-        const result = await updateDocumentPdf(
-          "Pendiente Firma 1",
-          base64SignTwo,
-          id,
-          conglomeradoDoc
-        );
-          //* Creación del template
-        //* Buscamos el template en la bd y lo creamos
-        // const template = await DocumentTemplate.findOne({
-        //   typeDocument: "Template",
-        // });
-        // if (!template) {
-        //   return res.status(400).json({
-        //     status: "error",
-        //     message: `No existe el template.`,
-        //     data: {},
-        //   });
-        // }
-        // const base64Template = await PDFDocument.load(
-        //   Buffer.from(template.base64Document, "base64")
-        // );
-        // const [page] = base64Template.getPages();
-        // const imageSign2 = await base64Template.embedPng(signOne);
-        // const imageSign2Dims = imageSign2.scale(0.1);
-        // const base64TemplateSignOne = await signDocument(
-        //   page,
-        //   imageSign2,
-        //   imageSign2Dims,
-        //   userInfo,
-        //   base64Template,
-        //   user,
-        //   "template"
-        // );
-        // // y lo guardo en la bd en otra colección asociado
-        // const signTemplate = new SignTemplate({
-        //   idDocument: result._id,
-        //   base64Document: base64TemplateSignOne,
-        // });
-        // await signTemplate.save();
-        return res.status(200).json({
-          status: "success",
-          message: `Firma 2 Realizada con éxito.`,
-          data: {
-            result,
-          },
-        });
-      }
-      break;
-    case "Pendiente Firma 1":
-      try {
-        // firmar documento con firma 1
-        const imageSignOne = await documentConglomerado.embedPng(
-          Buffer.from(signOne, "base64")
-        );
-        const signOneDims = imageSignOne.scale(0.1);
-        const pages = documentConglomerado.getPages();
-        const base64SignOne = await signDocument(
-          pages,
-          imageSignOne,
-          signOneDims,
-          userInfo,
-          documentConglomerado,
-          user,
-          "contrato"
-        );
-        // guardar en pdf en la bd y el cliente
-        const result = await updateDocumentPdf(
-          "Pendiente Certificación",
-          base64SignOne,
-          id,
-          conglomeradoDoc
-        );
-        // buscar el template con la firma 2 (id de mongo)
-        // const signTemplate = await SignTemplate.findOne({ idDocument: id });
-        // if (!signTemplate) {
-        //   return res.status(400).json({
-        //     status: "error",
-        //     message: `No existe el template.`,
-        //     data: {},
-        //   });
-        // }
-        // const templateWithSignTwo = await PDFDocument.load(
-        //   Buffer.from(signTemplate.base64Document, "base64")
-        // );
-
-        // const [page] = templateWithSignTwo.getPages();
-        // const imageSign1 = await templateWithSignTwo.embedPng(signOne);
-        // const imageSign1Dims = imageSign1.scale(0.1);
-        // // firmar el template con la firma 1
-        // const base64Template = await signDocument(
-        //   page,
-        //   imageSign1,
-        //   imageSign1Dims,
-        //   userInfo,
-        //   templateWithSignTwo,
-        //   user,
-        //   "template"
-        // );
-        // // actualizar en la bd con la colección signTemplate
-        // await SignTemplate.updateOne(
-        //   { _id: signTemplate.id },
-        //   { base64Document: base64Template }
-        // );
-        return res.status(200).json({
-          status: "success",
-          message: `Firma 1 Realizada con éxito.`,
-          data: {
-            result
-          },
-        });
-      } catch (error) {
-        return res.status(500).json({
-          status: "error",
-          message: `${error.message}`,
-          data: {},
-        });
-      }
-    case "Pendiente Firma 2":
-      try {
-        // firmar documento con firma 1
-        const imageSignTwo = await documentConglomerado.embedPng(
-          Buffer.from(signOne, "base64")
-        );
-        const signTwoDims = imageSignTwo.scale(0.1);
-        const pages = documentConglomerado.getPages();
-        const base64SignTwo = await signDocument(
-          pages,
-          imageSignTwo,
-          signTwoDims,
-          userInfo,
-          documentConglomerado,
-          user,
-          "contrato"
-        );
-        // guardar en pdf en la bd y el cliente
-        const result = await updateDocumentPdf(
-          "Pendiente Certificación",
-          base64SignTwo,
-          id,
-          conglomeradoDoc
-        );
-        // // buscar el template con la firma 2 (id de mongo)
-        // const signTemplate2 = await SignTemplate.findOne({ idDocument: id });
-        // if (!signTemplate2) {
-        //   return res.status(400).json({
-        //     status: "error",
-        //     message: `No existe el template.`,
-        //     data: {},
-        //   });
-        // }
-        // const templateWithSignOne = await PDFDocument.load(
-        //   Buffer.from(signTemplate2.base64Document, "base64")
-        // );
-        // const imageSign2 = await templateWithSignOne.embedPng(signOne);
-        // const imageSign2Dims = imageSign2.scale(0.1);
-        // const [page] = templateWithSignOne.getPages();
-        // // firmar el template con la firma 1
-        // const base64Template2 = await signDocument(
-        //   page,
-        //   imageSign2,
-        //   imageSign2Dims,
-        //   userInfo,
-        //   templateWithSignOne,
-        //   user,
-        //   "template"
-        // );
-        // // actualizar en la bd con la colección signTemplate
-        // await SignTemplate.updateOne(
-        //   { idDocument: id },
-        //   { base64Document: base64Template2 }
-        // );
-        return res.status(200).json({
-          status: "success",
-          message: `Firma 2 Realizada con éxito.`,
-          data: {
-            result
-          },
-        });
-      } catch (error) {
-        return res.status(500).json({
-          status: "error",
-          message: `${error.message}`,
-          data: {},
-        });
-      }
-  }
 };
 const signDocumentTest = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     // Cargar la plantilla de documento
     const { image } = req.body;
@@ -501,7 +388,7 @@ const signDocumentTest = async (req, res) => {
     }
     const template = await DocumentTemplate.findOne({
       typeDocument: "Template",
-    });
+    }).session(session);
     const templateBuffer = Buffer.from(template.base64Document, "base64");
     const pdfDoc = await PDFDocument.load(templateBuffer);
     const [page] = pdfDoc.getPages();
@@ -524,11 +411,14 @@ const signDocumentTest = async (req, res) => {
     const base64ModifiedPdf = arrayBufferToBase64(modifiedPdfBytes);
     return res.status(200).json(base64ModifiedPdf);
   } catch (error) {
+    await session.abortTransaction();
     return res.status(500).json({
       status: "error",
       message: `${error.message}`,
       data: {},
     });
+  }finally{
+    await session.endSession();
   }
 };
 export { addDocument, signDocumentConglomerado, signDocumentTest };

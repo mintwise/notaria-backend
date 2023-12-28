@@ -18,6 +18,10 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    inmobiliariaName: {
+        type: String,
+        default: ""
+    },
     token: {
         type: String,
         default: generarId()
