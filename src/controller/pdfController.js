@@ -3,7 +3,7 @@ import Client from "../model/Clients.js";
 import documentPDF from "../model/Pdf.js";
 
 const getPdf = async (req, res) => {
-  const session = mongoose.startSession();
+  const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const { id } = req.params;
@@ -44,7 +44,7 @@ const getPdf = async (req, res) => {
 };
 
 const getPdfs = async (req, res) => {
-  const session = mongoose.startSession();
+  const session = await mongoose.startSession();
   session.startTransaction();
   try {
     if (req.user.role === "API") {
@@ -54,7 +54,7 @@ const getPdfs = async (req, res) => {
         data: {},
       });
     }
-    const result = await documentPDF.find().session(session);
+    const result = await documentPDF.find({},{base64Document: 0});
     await session.commitTransaction();
     return res.status(200).json({
       status: "success",
@@ -71,12 +71,12 @@ const getPdfs = async (req, res) => {
       data: {},
     });
   } finally {
-    session.endSession();
+    session.endSession;
   }
 };
 
 const getCLientsByRut = async (req, res) => {
-  const session = mongoose.startSession();
+  const session = await mongoose.startSession();
   session.startTransaction();
   try {
     if (req.user.role === "API") {
@@ -142,7 +142,7 @@ const getCLientsByRut = async (req, res) => {
 };
 
 const getDocumentsCertificate = async (req, res) => {
-  const session = mongoose.startSession();
+  const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const { state } = req.query;
@@ -176,7 +176,7 @@ const getDocumentsCertificate = async (req, res) => {
 
 const deleteDocument = async (req, res) => {
   const { id } = req.params;
-  const session = mongoose.startSession();
+  const session = await mongoose.startSession();
   session.startTransaction();
   try {
     if (req.user.role === "API") {
