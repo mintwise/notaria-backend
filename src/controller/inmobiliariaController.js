@@ -247,7 +247,6 @@ const signDocumentConglomerado = async (req, res) => {
             status: "success",
             message: `Firma 1 Realizada con éxito.`,
             data: {
-              result,
             },
           });
         }
@@ -292,9 +291,7 @@ const signDocumentConglomerado = async (req, res) => {
           return res.status(200).json({
             status: "success",
             message: `Firma 2 Realizada con éxito.`,
-            data: {
-              result,
-            },
+            data: {},
           });
         }
         break;
@@ -325,9 +322,7 @@ const signDocumentConglomerado = async (req, res) => {
           return res.status(200).json({
             status: "success",
             message: `Firma 1 Realizada con éxito.`,
-            data: {
-              result,
-            },
+            data: {},
           });
       case "Pendiente Firma 2":
           // firmar documento con firma 1
@@ -356,9 +351,7 @@ const signDocumentConglomerado = async (req, res) => {
           return res.status(200).json({
             status: "success",
             message: `Firma 2 Realizada con éxito.`,
-            data: {
-              result2,
-            },
+            data: {},
           });
     }
   } catch (error) {

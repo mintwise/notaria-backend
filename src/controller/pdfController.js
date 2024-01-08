@@ -54,7 +54,7 @@ const getPdfs = async (req, res) => {
         data: {},
       });
     }
-    const result = await documentPDF.find({},{base64Document: 0});
+    const result = await documentPDF.find({}, { base64Document: 0 });
     await session.commitTransaction();
     return res.status(200).json({
       status: "success",
@@ -74,6 +74,101 @@ const getPdfs = async (req, res) => {
     session.endSession;
   }
 };
+
+const getPdfsFilter = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { rut, name, filter} = req.body;
+  
+    if (req.user.role === "API") {
+      return res.status(400).json({
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
+    }
+
+    switch (rut || name) {
+      case rut:
+        const result = await documentPDF.find(
+          { rutClient: rut.trim() },
+          { nameClient: 1, rutClient: 1, typeDocument: 1, filenameDocument: 1, createdAt: 1, _id: 1, state: 1 }
+        );
+        
+        let documents = [];
+        if (filter) {
+          documents.push(result.filter(element => element.typeDocument === filter));
+        } else {
+          documents.push(result);
+        }
+        
+        await session.commitTransaction();
+        return res.status(200).json({
+          status: "success",
+          message: `Documentos`,
+          data: {
+            documents: documents,
+          },
+        });
+      case name:
+        const resultName = await documentPDF.find(
+          { nameClient: name },
+          { nameClient: 1, rutClient: 1, typeDocument: 1, filenameDocument: 1 }
+        );
+        
+        let documentsName;
+        if (filter) {
+          documentsName = resultName.filter(element => element.typeDocument === filter);
+        } else {
+          documentsName = resultName;
+        }
+        
+        await session.commitTransaction();
+        return res.status(200).json({
+          status: "success",
+          message: `Documentos`,
+          data: {
+            documents: documentsName,
+          },
+        });
+    }
+  } catch (error) {
+    await session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession;
+  }
+};
+
+const getDocumentsRutFilter = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+        const result = await documentPDF.find({typeDocument: "Contrato"}, { nameClient: 1, rutClient: 1, filenameDocument: 1, _id: 1});
+        await session.commitTransaction();
+        return res.status(200).json({
+          status: "success",
+          message: `Documentos`,
+          data: {
+            documents: result,
+          },
+        });
+    } catch (error) {
+    await session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession;
+  }
+}
 
 const getCLientsByRut = async (req, res) => {
   const session = await mongoose.startSession();
@@ -220,7 +315,9 @@ const deleteDocument = async (req, res) => {
 export {
   getPdf,
   getPdfs,
+  getPdfsFilter,
   getCLientsByRut,
   getDocumentsCertificate,
+  getDocumentsRutFilter,
   deleteDocument,
 };
