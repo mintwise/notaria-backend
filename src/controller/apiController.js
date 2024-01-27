@@ -5,16 +5,10 @@ import { formatValue } from "../utils/converter.js";
 import User from "../model/User.js";
 import generarJWT from "../helpers/generarJWT.js";
 import jwt from "jsonwebtoken";
+import { PDFDocument } from "pdf-lib";
 
 const addDocumentApi = async (req, res) => {
   try {
-    if (req.user.role !== "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
-    }
     const {
       nameResponsible,
       rutResponsible,
@@ -132,6 +126,12 @@ const getCertificatesDocuments = async (req, res) => {
     }
     const { id } = req.query;
     const document = await documentPDF.findById({ _id: id });
+    // Convertir la cadena base64 en un buffer
+    const documentLoad = await PDFDocument.load(
+      Buffer.from(document.base64Document, "base64")
+    );
+    // Obtener el número de páginas
+      const pages = documentLoad.getPages();
     if (!document) {
       return res.status(400).json({
         status: "error",
@@ -143,7 +143,8 @@ const getCertificatesDocuments = async (req, res) => {
       status: "200",
       message: `Documentos Certificados.`,
       data: {
-        document,
+        pages: pages.length,
+        document
       },
     });
   } catch (error) {
