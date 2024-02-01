@@ -295,7 +295,7 @@ const changeStateConglomerado = async (req, res) => {
       message: `${error.message}`,
       data: {},
     });
-  }finally {
+  } finally {
     session.endSession();
   }
 };

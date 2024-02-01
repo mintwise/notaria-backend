@@ -6,6 +6,8 @@ import User from "../model/User.js";
 import generarJWT from "../helpers/generarJWT.js";
 import jwt from "jsonwebtoken";
 import { PDFDocument } from "pdf-lib";
+import mongoose from "mongoose";
+import axios from "axios";
 
 const addDocumentApi = async (req, res) => {
   try {
@@ -115,6 +117,211 @@ const addDocumentApi = async (req, res) => {
   }
 };
 
+const addDocumentFeaApi = async (req, res) => {
+  try {
+    const {
+      nameResponsible,
+      rutResponsible,
+      emailResponsible,
+      nameClient,
+      rutClient,
+      emailClient,
+      filenameDocument,
+      base64Document,
+      typeDocument,
+    } = req.body;
+
+    if (req.user.role !== "API") {
+      return res.status(400).json({
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
+    }
+    if (typeDocument !== "Documento FEA") {
+      return res.status(400).json({
+        status: "error",
+        message: `No puede agregar documentos de tipo ${typeDocument} en esta sección.`,
+        data: {},
+      });
+    }
+
+    const filename = formatValue(filenameDocument);
+    const client = await Client.findOne({ rutClient });
+    const result = await saveDocumentPdf(
+      req.body,
+      "Pendiente Revisión",
+      typeDocument,
+      base64Document,
+      filename,
+      "externo"
+    );
+    if (!client) {
+      let documents = [];
+      documents.push({
+        _id: result._id,
+        filename,
+        typeDocument,
+      });
+      const objectClient = new Client({
+        nameResponsible,
+        rutResponsible,
+        emailResponsible,
+        nameClient,
+        rutClient,
+        emailClient,
+        documents,
+      });
+      await Client.create(objectClient);
+      return res.status(200).json({
+        status: "success",
+        message: `Documento agregado correctamente.`,
+        data: {
+          id: objectClient.documents[0]._id,
+          filename: objectClient.documents[0].filename,
+          typeDocument: objectClient.documents[0].typeDocument,
+        },
+      });
+    }
+    // insertar en la bd Colección Clients
+    if (client.documents.length) {
+      const isDuplicate = client.documents.some(
+        (doc) => doc.filename === filename
+      );
+
+      if (isDuplicate) {
+        return res.status(400).json({
+          status: "error",
+          message: `Ya existe un documento con el nombre ${filename}.`,
+          data: {},
+        });
+      }
+
+      const document = {
+        _id: result._id,
+        filename,
+        typeDocument,
+      };
+      await Client.findOneAndUpdate(
+        { rutClient },
+        { $push: { documents: document } }
+      );
+      return res.status(200).json({
+        status: "success",
+        message: `Documento agregado correctamente.`,
+        data: {
+          id: document._id,
+          filename: document.filename,
+          typeDocument: document.typeDocument,
+        },
+      });
+    }
+  } catch (error) {
+    return res.status(400).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  }
+};
+
+const changeStateDocumentFeaApi = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { base64Document } = req.body;
+    const { id } = req.query;
+    let errorMessage;
+    if (req.user.role !== "AdminNotaria") {
+      return res.status(400).json({
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
+    }
+    // actualizar el estado del documento conglomerado
+    const document = await documentPDF.findOne({ _id: id }).session(session);
+
+    if (document.typeDocument !== "Documento FEA") {
+      return res.status(400).json({
+        status: "error",
+        message: `No se admiten documentos distintos a Documento FEA.`,
+        data: {},
+      });
+    }
+    if (document.state === "Revisado") {
+      return res.status(400).json({
+        status: "error",
+        message: `Documento Revisado.`,
+        data: {},
+      });
+    }
+    // cargar documento pdf en la librería para obtener las paginas
+    const documentLoad = await PDFDocument.load(
+      Buffer.from(document.base64Document, "base64")
+    );
+    const pages = documentLoad.getPages();
+
+    // actualizar el documento en el cliente y el documento
+    const documentCertificate = {
+      base64Document,
+      state: "Revisado",
+    };
+    await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
+      new: true,
+    });
+    // Configurar Axios con la URL base de la API
+    const apiUrl = "https://galileaapp.bubbleapps.io/version-test/api/1.1/wf/whnotario"
+    const config = {
+      headers: {
+        'Authorization': `Bearer ${process.env.TOKEN_API_GALILEA}`,  
+        'Content-Type': 'application/json'
+      }
+    };
+    const bodyAxios = {
+      id,
+      base64Document,
+      pages: parseInt(pages.length)
+    };
+    axios.post(apiUrl, bodyAxios, config)
+    .then(response => {
+      console.log('Respuesta de la API:', response.data);
+    })
+    .catch(error =>{
+
+    console.error('Error al comunicarse con la API:', error);
+    errorMessage = 'Error al comunicarse con la API externa.';
+    if (error.response) {
+      errorMessage += ` Código de estado: ${error.response.status}`;
+    } else if (error.request) {
+      errorMessage += ' No se recibió respuesta del servidor.';
+    } else {
+      errorMessage += ` Mensaje de error: ${error.message}`;
+    }
+    })
+    .finally(() => {
+      // Esta sección no se ejecutará si se ha retornado anteriormente
+      session.endSession();
+    })
+    await session.commitTransaction();
+    // actualizar el documento del cliente
+    return res.status(200).json({
+      status: "success",
+      message: `Documento revisado con éxito.`,
+      data: {},
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    return res.status(400).json({
+      status: "error",
+      message: error ? error.message : errorMessage,
+      data: {},
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
 const getCertificatesDocuments = async (req, res) => {
   try {
     if (req.user.role !== "API") {
@@ -131,7 +338,7 @@ const getCertificatesDocuments = async (req, res) => {
       Buffer.from(document.base64Document, "base64")
     );
     // Obtener el número de páginas
-      const pages = documentLoad.getPages();
+    const pages = documentLoad.getPages();
     if (!document) {
       return res.status(400).json({
         status: "error",
@@ -144,7 +351,7 @@ const getCertificatesDocuments = async (req, res) => {
       message: `Documentos Certificados.`,
       data: {
         pages: pages.length,
-        document
+        document,
       },
     });
   } catch (error) {
@@ -218,4 +425,11 @@ const validateToken = async (req, res) => {
   }
 };
 
-export { addDocumentApi, getCertificatesDocuments, getToken, validateToken };
+export {
+  addDocumentApi,
+  addDocumentFeaApi,
+  changeStateDocumentFeaApi,
+  getCertificatesDocuments,
+  getToken,
+  validateToken,
+};
