@@ -297,7 +297,7 @@ const changeStateDocumentFeaApi = async (req, res) => {
     const bodyAxios = {
       id,
       base64Document,
-      pages: parseInt(pages.length)
+      nroPagDoc: parseInt(pages.length)
     };
     axios.post(apiUrl, bodyAxios, config)
     .then(response => {
