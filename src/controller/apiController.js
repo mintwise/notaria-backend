@@ -118,6 +118,8 @@ const addDocumentApi = async (req, res) => {
 };
 
 const addDocumentFeaApi = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const {
       nameResponsible,
@@ -156,6 +158,13 @@ const addDocumentFeaApi = async (req, res) => {
       filename,
       "externo"
     );
+
+    const documentLoad = await PDFDocument.load(
+      Buffer.from(base64Document, "base64")
+    );
+    // Obtener el número de páginas
+      const pages = documentLoad.getPages();
+
     if (!client) {
       let documents = [];
       documents.push({
@@ -173,6 +182,7 @@ const addDocumentFeaApi = async (req, res) => {
         documents,
       });
       await Client.create(objectClient);
+      await session.commitTransaction();
       return res.status(200).json({
         status: "success",
         message: `Documento agregado correctamente.`,
@@ -180,6 +190,7 @@ const addDocumentFeaApi = async (req, res) => {
           id: objectClient.documents[0]._id,
           filename: objectClient.documents[0].filename,
           typeDocument: objectClient.documents[0].typeDocument,
+          pages: pages.length
         },
       });
     }
@@ -206,6 +217,7 @@ const addDocumentFeaApi = async (req, res) => {
         { rutClient },
         { $push: { documents: document } }
       );
+      await session.commitTransaction();
       return res.status(200).json({
         status: "success",
         message: `Documento agregado correctamente.`,
@@ -213,15 +225,19 @@ const addDocumentFeaApi = async (req, res) => {
           id: document._id,
           filename: document.filename,
           typeDocument: document.typeDocument,
+          pages: pages.length
         },
       });
     }
   } catch (error) {
+    await session.abortTransaction();
     return res.status(400).json({
       status: "error",
       message: `${error.message}`,
       data: {},
     });
+  } finally {
+    session.endSession();
   }
 };
 
