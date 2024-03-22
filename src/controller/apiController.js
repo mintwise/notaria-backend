@@ -287,7 +287,7 @@ const changeStateDocumentFeaApi = async (req, res) => {
       new: true,
     });
     // Configurar Axios con la URL base de la API
-    const apiUrl = "https://galileaapp.bubbleapps.io/version-test/api/1.1/wf/whnotario"
+    const apiUrl = "https://galileaapp.bubbleapps.io/api/1.1/wf/whnotario/"
     const config = {
       headers: {
         'Authorization': `Bearer ${process.env.TOKEN_API_GALILEA}`,  
