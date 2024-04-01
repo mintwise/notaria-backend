@@ -179,7 +179,7 @@ const addDocumentInmobiliaria = async (req, res) => {
     };
     const promesaDocument = await saveDocumentPdf(
       objectClient,
-      "Promesa",
+      "Pendiente Revisión",
       typeDocument,
       base64Document,
       filename,
@@ -199,7 +199,19 @@ const addDocumentInmobiliaria = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: `Creado con éxito.`,
-      data: promesaDocument,
+      data: {
+        _id: promesaDocument._id,
+        nameResponsible: promesaDocument.nameResponsible,
+        rutResponsible: promesaDocument.rutResponsible,
+        emailResponsible: promesaDocument.emailResponsible,
+        nameClient: promesaDocument.nameClient,
+        rutClient: promesaDocument.rutClient,
+        emailClient: promesaDocument.emailClient,
+        state: promesaDocument.state,
+        filenameDocument: promesaDocument.filenameDocument,
+        typeDocument: promesaDocument.typeDocument,
+        canal: promesaDocument.canal
+      },
     });
   } catch (error) {
     session.abortTransaction();
