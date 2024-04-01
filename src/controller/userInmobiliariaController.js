@@ -2,6 +2,9 @@ import User from "../model/User.js";
 import mongoose from "mongoose";
 import { authUser } from "../utils/authUser.js";
 import bcrypt from "bcrypt";
+import { formatValue } from "../utils/converter.js";
+import { saveDocumentPdf } from "../helpers/index.js";
+import { sendEmail } from "../emails/sendEmail.js";
 
 const userList = async (req, res) => {
   const session = await mongoose.startSession();
@@ -118,7 +121,6 @@ const userDelete = async (req, res) => {
     const token = req.headers.authorization.split(" ")[1];
     await authUser(res, token);
     const deleted = await User.findByIdAndDelete(id).session(session);
-    console.log(deleted);
     await session.commitTransaction();
     return res.status(200).json({
       status: "success",
@@ -137,4 +139,78 @@ const userDelete = async (req, res) => {
   }
 };
 
-export { userList, userCreate, userEdit, userDelete };
+const addDocumentInmobiliaria = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    // comprobar si existe el usuario
+    const token = req.headers.authorization.split(" ")[1];
+    await authUser(res, token);
+    //TODO: método para agregar documentos y enviar email
+    const {
+      nameResponsible,
+      rutResponsible,
+      emailResponsible,
+      nameClient,
+      rutClient,
+      emailClient,
+      filenameDocument,
+      base64Document,
+      typeDocument,
+    } = req.body;
+    // TODO: verificar que role va a usar el endpoint
+    if (req.user.role !== "AdminNotaria") {
+      return res.status(400).json({
+        status: "error",
+        message: `No tiene permisos para realizar esta acción.`,
+        data: {},
+      });
+    }
+    // función que formatea el nombre del documento
+    const filename = formatValue(filenameDocument);
+    //inserta el documento en la bd PDF
+    const objectClient = {
+      nameResponsible,
+      rutResponsible,
+      emailResponsible,
+      nameClient,
+      rutClient,
+      emailClient,
+    };
+    const promesaDocument = await saveDocumentPdf(
+      objectClient,
+      "Promesa",
+      typeDocument,
+      base64Document,
+      filename,
+      "interno"
+    );
+    // ENVIAR EMAIL DE CONFIRMACIÓN
+    const datos = {
+      emailNotaria: emailResponsible,
+      emailResponsible,
+      subject: "Documento Promesa",
+      name: nameClient,
+      message: "Se ha subido el documento de promesa con éxito.",
+    };
+    await sendEmail(datos);
+
+    await session.commitTransaction();
+    return res.status(200).json({
+      status: "success",
+      message: `Creado con éxito.`,
+      data: promesaDocument,
+    });
+  } catch (error) {
+    session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+export { userList, userCreate, userEdit, userDelete, addDocumentInmobiliaria };
