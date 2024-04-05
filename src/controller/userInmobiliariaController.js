@@ -1,10 +1,14 @@
+//modelos
 import User from "../model/User.js";
+import Pdf from "../model/Pdf.js";
+//librerías
 import mongoose from "mongoose";
-import { authUser } from "../utils/authUser.js";
 import bcrypt from "bcrypt";
+//funciones
+import { authUser } from "../utils/authUser.js";
 import { formatValue } from "../utils/converter.js";
 import { saveDocumentPdf } from "../helpers/index.js";
-import { sendEmail } from "../emails/sendEmail.js";
+import {  sendEmailTest } from "../emails/sendEmail.js";
 
 const userList = async (req, res) => {
   const session = await mongoose.startSession();
@@ -26,6 +30,42 @@ const userList = async (req, res) => {
     });
   } catch (error) {
     session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+const getUser = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { id } = req.params;
+    // comprobar si existe el usuario
+    const token = req.headers.authorization.split(" ")[1];
+    await authUser(res, token);
+    // búsqueda de los usuarios
+    const result = await User.findById({ _id: id }).session(session);
+
+    if (!result) {
+      return res.status(400).json({
+        status: "error",
+        message: `Usuario no existe.`,
+        data: {},
+      });
+    }
+    await session.commitTransaction();
+    return res.status(200).json({
+      status: "success",
+      message: `Documento encontrado.`,
+      data: result,
+    });
+  } catch (error) {
+    await session.abortTransaction();
     return res.status(500).json({
       status: "error",
       message: `${error.message}`,
@@ -139,14 +179,62 @@ const userDelete = async (req, res) => {
   }
 };
 
-const addDocumentInmobiliaria = async (req, res) => {
+const listDocumentGeneric = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const documents = await Pdf.find({
+      typeDocument: { $eq: "Genérico" },
+    }, {base64Document: 0}).session(session);
+    // RESPUESTA DEL SERVIDOR
+    await session.commitTransaction();
+    return res.status(200).json({
+      status: "success",
+      message: `Creado con éxito.`,
+      data: documents,
+    });
+  } catch (error) {
+    session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+const getDocumentGeneric = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { id } = req.params;
+    const documents = await Pdf.findById({_id: id}).session(session);
+    // RESPUESTA DEL SERVIDOR
+    await session.commitTransaction();
+    return res.status(200).json({
+      status: "success",
+      message: `Creado con éxito.`,
+      data: documents,
+    });
+  } catch (error) {
+    session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+const addDocumentGeneric = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     // comprobar si existe el usuario
-    const token = req.headers.authorization.split(" ")[1];
-    await authUser(res, token);
-    //TODO: método para agregar documentos y enviar email
     const {
       nameResponsible,
       rutResponsible,
@@ -158,14 +246,6 @@ const addDocumentInmobiliaria = async (req, res) => {
       base64Document,
       typeDocument,
     } = req.body;
-    // TODO: verificar que role va a usar el endpoint
-    if (req.user.role !== "AdminNotaria") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
-    }
     // función que formatea el nombre del documento
     const filename = formatValue(filenameDocument);
     //inserta el documento en la bd PDF
@@ -187,14 +267,13 @@ const addDocumentInmobiliaria = async (req, res) => {
     );
     // ENVIAR EMAIL DE CONFIRMACIÓN
     const datos = {
-      emailNotaria: emailResponsible,
       emailResponsible,
-      subject: "Documento Promesa",
-      name: nameClient,
-      message: "Se ha subido el documento de promesa con éxito.",
+      subject: "Creación De Documento Genérico",
+      name: nameResponsible,
+      message: `Se ha subido el documento "${filename}" con éxito.`,
     };
-    await sendEmail(datos);
-
+    await sendEmailTest(datos);
+    // RESPUESTA DEL SERVIDOR
     await session.commitTransaction();
     return res.status(200).json({
       status: "success",
@@ -210,7 +289,7 @@ const addDocumentInmobiliaria = async (req, res) => {
         state: promesaDocument.state,
         filenameDocument: promesaDocument.filenameDocument,
         typeDocument: promesaDocument.typeDocument,
-        canal: promesaDocument.canal
+        canal: promesaDocument.canal,
       },
     });
   } catch (error) {
@@ -225,4 +304,101 @@ const addDocumentInmobiliaria = async (req, res) => {
   }
 };
 
-export { userList, userCreate, userEdit, userDelete, addDocumentInmobiliaria };
+const editDocumentGeneric = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { base64Document } = req.body;
+    const { id } = req.params;
+    // actualizar el estado del documento conglomerado
+    const document = await Pdf.findOne({ _id: id }).session(session);
+
+    if (document.typeDocument !== "Genérico") {
+      return res.status(400).json({
+        status: "error",
+        message: `No se admiten documentos distintos a Documento Genérico.`,
+        data: {},
+      });
+    }
+    if (document.state === "Revisado") {
+      return res.status(400).json({
+        status: "error",
+        message: `Documento Revisado.`,
+        data: {},
+      });
+    }
+    // actualizar el documento en el cliente y el documento
+    const documentCertificate = {
+      base64Document,
+      state: "Revisado",
+    };
+    const updated = await Pdf.findOneAndUpdate(
+      { _id: id },
+      documentCertificate,
+      {
+        new: true,
+      }
+    );
+    // email de confirmación
+    const datos = {
+      emailResponsible: updated.emailResponsible,
+      subject: "Actualización De Documento Genérico",
+      name: updated.nameResponsible,
+      message: `Se ha revisado el documento ${updated.filenameDocument} con éxito.`,
+    };
+    await sendEmailTest(datos);
+    await session.commitTransaction();
+    return res.status(200).json({
+      status: "success",
+      message: `Creado con éxito.`,
+      data: updated,
+    });
+  } catch (error) {
+    session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+const deleteDocumentGeneric = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { id } = req.params;
+    await Pdf.findByIdAndDelete({ _id: id }).session(session);
+    // RESPUESTA DEL SERVIDOR
+    await session.commitTransaction();
+    return res.status(200).json({
+      status: "success",
+      message: `Documento eliminado con éxito.`,
+      data: {},
+    });
+  } catch (error) {
+    session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+export {
+  userList,
+  getUser,
+  userCreate,
+  userEdit,
+  userDelete,
+  listDocumentGeneric,
+  addDocumentGeneric,
+  editDocumentGeneric,
+  deleteDocumentGeneric,
+  getDocumentGeneric,
+};
