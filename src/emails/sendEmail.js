@@ -1,93 +1,40 @@
-import { transporter } from "../config/nodemailer.js"
+import pkg from "sib-api-v3-sdk";
+const { ApiClient, SendSmtpEmail, TransactionalEmailsApi } = pkg;
 
-// export const sendEmail =  (datos) => { 
-//      resend.emails.send({
-//         from: "FIRMANOTARIAL@notariacamilla.cl",
-//         to: datos.emailResponsible,
-//         subject: `Galilea Notaria - ${datos.subject}`,
-//         html: `
-//         <html>
-//         <head>
-//             <style>
-//                 body {
-//                     font-family: Arial, sans-serif;
-//                     background-color: #f4f4f4;
-//                     color: #333;
-//                     padding: 20px;
-//                 }
-//                 .container {
-//                     max-width: 600px;
-//                     margin: 0 auto;
-//                     padding: 20px;
-//                     background-color: #fff;
-//                     border-radius: 5px;
-//                     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-//                 }
-//                 h2 {
-//                     font-size: 22px;
-//                     text-align: center;
-//                     color: #007bff;
-//                 }
-//                 p {
-//                     margin-bottom: 15px;
-//                     text-align: center;
-//                     font-size: 18px;
-//                 }
-//             </style>
-//         </head>
-//         <body>
-//             <div class="container">
-//                 <h2>Estimado/a ${datos.name}</h2>
-//                 <p>${datos.message}</p>
-//             </div>
-//         </body>
-//         </html>
-//         `,
-//     });
-// }
+const sendEmail = async (datos) => {
+  // Configura las credenciales de la API
+  const defaultClient = ApiClient.instance;
+  const apiKey = defaultClient.authentications["api-key"];
+  apiKey.apiKey = process.env.EMAIL_API_KEY;
 
-export const sendEmailTest = async (datos) => { 
-    await transporter.sendMail({
-        from: "FIRMANOTARIAL@notariacamilla.cl",
-        to: datos.emailResponsible,
-        subject: `${datos.subject}`,
-        html: `
-        <html>
-        <head>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    background-color: #f4f4f4;
-                    color: #333;
-                    padding: 20px;
-                }
-                .container {
-                    max-width: 600px;
-                    margin: 0 auto;
-                    padding: 20px;
-                    background-color: #fff;
-                    border-radius: 5px;
-                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-                }
-                h2 {
-                    font-size: 22px;
-                    text-align: center;
-                    color: #007bff;
-                }
-                p {
-                    margin-bottom: 15px;
-                    text-align: center;
-                    font-size: 18px;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>Estimado/a ${datos.name}</h2>
-                <p>${datos.message}</p>
-            </div>
-        </body>
-        </html>
-        `,
-    });
-}
+  // Crea una instancia de la API de Sendinblue
+  const apiInstance = new TransactionalEmailsApi();
+
+  try {
+    const correo = new SendSmtpEmail();
+    correo.subject = `${datos.subject}`;
+    correo.htmlContent = `
+    <h2 style="color: #333; font-family: Arial, sans-serif;">Estimado/a ${datos.name},</h2>
+    <p style="color: #555; font-family: Arial, sans-serif;">${datos.message}</p>
+    <p style="color: #777; font-family: Arial, sans-serif;">Firma Notarial.</p>
+    `;
+    correo.sender = {
+      name: "Firma Notarial",
+      email: "firmanotarial@notariacamilla.cl",
+    };
+    correo.to = datos.to.map((destinatario) => ({ email: destinatario }));
+    if (datos.base64Document) {
+      correo.attachment = [
+        {
+          name: `${datos.filenameDocument}.pdf`,
+          content: datos.base64Document,
+        },
+      ];
+    }
+    await apiInstance.sendTransacEmail(correo);
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+export default sendEmail;

@@ -8,7 +8,7 @@ import bcrypt from "bcrypt";
 import { authUser } from "../utils/authUser.js";
 import { formatValue } from "../utils/converter.js";
 import { saveDocumentPdf } from "../helpers/index.js";
-import {  sendEmailTest } from "../emails/sendEmail.js";
+import sendEmail from "../emails/sendEmail.js";
 
 const userList = async (req, res) => {
   const session = await mongoose.startSession();
@@ -183,9 +183,12 @@ const listDocumentGeneric = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const documents = await Pdf.find({
-      typeDocument: { $eq: "Genérico" },
-    }, {base64Document: 0}).session(session);
+    const documents = await Pdf.find(
+      {
+        typeDocument: { $eq: "Genérico" },
+      },
+      { base64Document: 0 }
+    ).session(session);
     // RESPUESTA DEL SERVIDOR
     await session.commitTransaction();
     return res.status(200).json({
@@ -210,7 +213,7 @@ const getDocumentGeneric = async (req, res) => {
   session.startTransaction();
   try {
     const { id } = req.params;
-    const documents = await Pdf.findById({_id: id}).session(session);
+    const documents = await Pdf.findById({ _id: id }).session(session);
     // RESPUESTA DEL SERVIDOR
     await session.commitTransaction();
     return res.status(200).json({
@@ -267,12 +270,13 @@ const addDocumentGeneric = async (req, res) => {
     );
     // ENVIAR EMAIL DE CONFIRMACIÓN
     const datos = {
-      emailResponsible,
       subject: "Creación De Documento Genérico",
       name: nameResponsible,
       message: `Se ha subido el documento "${filename}" con éxito.`,
+      to: [emailResponsible, emailClient]
     };
-    await sendEmailTest(datos);
+    await sendEmail(datos);
+    // await sendEmailTest(datos);
     // RESPUESTA DEL SERVIDOR
     await session.commitTransaction();
     return res.status(200).json({
@@ -338,15 +342,17 @@ const editDocumentGeneric = async (req, res) => {
       {
         new: true,
       }
-    );
-    // email de confirmación
+    ).session(session);
+    // ENVIAR EMAIL DE CONFIRMACIÓN
     const datos = {
-      emailResponsible: updated.emailResponsible,
       subject: "Actualización De Documento Genérico",
       name: updated.nameResponsible,
-      message: `Se ha revisado el documento ${updated.filenameDocument} con éxito.`,
+      message: `Se ha actualizado el documento "${updated.filenameDocument}" con éxito.`,
+      to: [updated.emailResponsible, updated.emailClient],
+      base64Document: updated.base64Document,
+      filenameDocument: updated.filenameDocument,
     };
-    await sendEmailTest(datos);
+    await sendEmail(datos);
     await session.commitTransaction();
     return res.status(200).json({
       status: "success",
