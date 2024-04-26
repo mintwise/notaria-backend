@@ -26,7 +26,7 @@ const sendEmail = async (datos) => {
     if (datos.base64Document) {
       correo.attachment = [
         {
-          name: `${datos.filenameDocument}.pdf`,
+          name: `${datos.filenameDocument}`,
           content: datos.base64Document,
         },
       ];

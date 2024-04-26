@@ -1,16 +1,27 @@
+// Modelos
 import Client from "../model/Clients.js";
 import documentPDF from "../model/Pdf.js";
-import { saveDocumentPdf } from "../helpers/index.js";
-import { formatValue } from "../utils/converter.js";
 import User from "../model/User.js";
+// Helpers
+import {
+  generateValue,
+  handleErrorResponse,
+  saveDocumentPdf,
+} from "../helpers/index.js";
 import generarJWT from "../helpers/generarJWT.js";
+// Librerías
 import jwt from "jsonwebtoken";
 import { PDFDocument } from "pdf-lib";
 import mongoose from "mongoose";
 import axios from "axios";
+import { v4 } from "uuid";
+import s3 from "../config/s3.js";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const addDocumentApi = async (req, res) => {
+  const session = await mongoose.startSession();
   try {
+    session.startTransaction();
     const {
       nameResponsible,
       rutResponsible,
@@ -18,35 +29,60 @@ const addDocumentApi = async (req, res) => {
       nameClient,
       rutClient,
       emailClient,
-      filenameDocument,
-      base64Document,
       typeDocument,
-    } = req.body;
-
+    } = req.query;
+    const file = req.file;
+    let url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
     if (req.user.role !== "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        "No tiene permisos para realizar esta acción."
+      );
+      return;
     }
     if (typeDocument !== "Conglomerado") {
-      return res.status(400).json({
-        status: "error",
-        message: `No puede agregar documentos de tipo ${typeDocument} en esta sección.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        `No puede agregar documentos de tipo ${typeDocument} en esta sección.`
+      );
+      return;
     }
-
-    const filename = formatValue(filenameDocument);
+    const filename = generateValue(file?.originalname);
     const client = await Client.findOne({ rutClient });
+    // subir documento en amazon
+    const idDocument = v4();
+    const urlDocument = `${url}${idDocument}`;
+    // Insertar en s3
+    const command = new PutObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: idDocument,
+      Body: file.buffer,
+      ContentType: "application/pdf",
+    });
+    await s3.send(command);
+    const usuario = {
+      nameResponsible,
+      rutResponsible,
+      emailResponsible,
+    };
+    const cliente = {
+      nameClient,
+      rutClient,
+      emailClient,
+    };
     const result = await saveDocumentPdf(
-      req.body,
+      usuario,
+      cliente,
       "Pendiente Firma",
       typeDocument,
-      base64Document,
+      null,
+      urlDocument,
+      idDocument,
       filename,
-      "externo"
+      "externo",
+      session
     );
     if (!client) {
       let documents = [];
@@ -65,6 +101,7 @@ const addDocumentApi = async (req, res) => {
         documents,
       });
       await Client.create(objectClient);
+      await session.commitTransaction();
       return res.status(200).json({
         status: "success",
         message: `Documento agregado correctamente.`,
@@ -98,6 +135,7 @@ const addDocumentApi = async (req, res) => {
         { rutClient },
         { $push: { documents: document } }
       );
+      await session.commitTransaction();
       return res.status(200).json({
         status: "success",
         message: `Documento agregado correctamente.`,
@@ -109,11 +147,14 @@ const addDocumentApi = async (req, res) => {
       });
     }
   } catch (error) {
-    return res.status(400).json({
+    session.abortTransaction();
+    return res.status(500).json({
       status: "error",
       message: `${error.message}`,
       data: {},
     });
+  } finally {
+    session.endSession();
   }
 };
 
@@ -128,43 +169,87 @@ const addDocumentFeaApi = async (req, res) => {
       nameClient,
       rutClient,
       emailClient,
-      filenameDocument,
-      base64Document,
       typeDocument,
-    } = req.body;
+    } = req.query;
+    const file = req.file;
+    let url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
 
     if (req.user.role !== "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        "No tiene permisos para realizar esta acción."
+      );
+      return;
     }
     if (typeDocument !== "Documento FEA") {
-      return res.status(400).json({
-        status: "error",
-        message: `No puede agregar documentos de tipo ${typeDocument} en esta sección.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        `No puede agregar documentos de tipo ${typeDocument} en esta sección.`
+      );
+      return;
     }
-
-    const filename = formatValue(filenameDocument);
+    const filename = generateValue(file?.originalname);
     const client = await Client.findOne({ rutClient });
+    if (!client) {
+      handleErrorResponse(
+        res,
+        400,
+        `No existe el cliente con rut ${rutClient}.`
+      );
+      return;
+    }
+    const usuario = {
+      nameResponsible,
+      rutResponsible,
+      emailResponsible,
+    };
+    const cliente = {
+      nameClient,
+      rutClient,
+      emailClient,
+    };
+    const isDuplicate = client?.documents.some(
+      (doc) => doc.filename === filename
+    );
+
+    if (isDuplicate) {
+      handleErrorResponse(
+        res,
+        400,
+        `Ya existe un documento con el nombre ${filename}.`
+      );
+      return;
+    }
+    // subir documento en amazon
+    const idDocument = v4();
+    const urlDocument = `${url}${idDocument}`;
+    // Insertar en s3
+    const command = new PutObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: idDocument,
+      Body: file.buffer,
+      ContentType: "application/pdf",
+    });
+    await s3.send(command);
     const result = await saveDocumentPdf(
-      req.body,
+      usuario,
+      cliente,
       "Pendiente Revisión",
       typeDocument,
-      base64Document,
+      null,
+      urlDocument,
+      idDocument,
       filename,
-      "externo"
+      "externo",
+      session
     );
-
     const documentLoad = await PDFDocument.load(
-      Buffer.from(base64Document, "base64")
+      Buffer.from(file.buffer).toString("base64")
     );
     // Obtener el número de páginas
-      const pages = documentLoad.getPages();
-
+    const pages = documentLoad.getPages();
     if (!client) {
       let documents = [];
       documents.push({
@@ -190,24 +275,12 @@ const addDocumentFeaApi = async (req, res) => {
           id: objectClient.documents[0]._id,
           filename: objectClient.documents[0].filename,
           typeDocument: objectClient.documents[0].typeDocument,
-          pages: pages.length
+          pages: pages.length,
         },
       });
     }
     // insertar en la bd Colección Clients
     if (client.documents.length) {
-      const isDuplicate = client.documents.some(
-        (doc) => doc.filename === filename
-      );
-
-      if (isDuplicate) {
-        return res.status(400).json({
-          status: "error",
-          message: `Ya existe un documento con el nombre ${filename}.`,
-          data: {},
-        });
-      }
-
       const document = {
         _id: result._id,
         filename,
@@ -225,12 +298,13 @@ const addDocumentFeaApi = async (req, res) => {
           id: document._id,
           filename: document.filename,
           typeDocument: document.typeDocument,
-          pages: pages.length
+          pages: pages.length,
         },
       });
     }
   } catch (error) {
     await session.abortTransaction();
+    console.log(error)
     return res.status(400).json({
       status: "error",
       message: `${error.message}`,
@@ -245,80 +319,95 @@ const changeStateDocumentFeaApi = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { base64Document } = req.body;
+    const file = req.file;
     const { id } = req.query;
     let errorMessage;
     if (req.user.role !== "AdminNotaria") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        "No tiene permisos para realizar esta acción."
+      );
+      return;
     }
     // actualizar el estado del documento conglomerado
     const document = await documentPDF.findOne({ _id: id }).session(session);
-
     if (document.typeDocument !== "Documento FEA") {
-      return res.status(400).json({
-        status: "error",
-        message: `No se admiten documentos distintos a Documento FEA.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        `No puede cambiar el estado de un documento de tipo ${document.typeDocument}.`
+      );
+      return;
     }
     if (document.state === "Revisado") {
-      return res.status(400).json({
-        status: "error",
-        message: `Documento Revisado.`,
-        data: {},
-      });
+      handleErrorResponse(res, 400, `documento revisado.`);
+      return;
     }
     // cargar documento pdf en la librería para obtener las paginas
     const documentLoad = await PDFDocument.load(
-      Buffer.from(document.base64Document, "base64")
+      Buffer.from(file.buffer).toString("base64")
     );
     const pages = documentLoad.getPages();
-
     // actualizar el documento en el cliente y el documento
-    const documentCertificate = {
-      base64Document,
-      state: "Revisado",
+    //* actualizar el documento en aws s3
+    //? primero borramos el existente con el idDocument
+    const params2 = {
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: document.idDocument,
     };
-    await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
-      new: true,
-    });
+    await s3.send(new DeleteObjectCommand(params2));
+    //? Ahora subiremos el nuevo documento
+    const paramsNew2 = {
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Body: file.buffer,
+      ContentType: "application/pdf",
+      Key: document.idDocument,
+    };
+    await s3.send(new PutObjectCommand(paramsNew2));
+    await documentPDF
+      .findOneAndUpdate(
+        { _id: id },
+        { state: "Revisado" },
+        {
+          new: true,
+        }
+      )
+      .session(session);
     // Configurar Axios con la URL base de la API
-    const apiUrl = "https://galileaapp.bubbleapps.io/api/1.1/wf/whnotario/"
+    const apiUrl = "https://galileaapp.bubbleapps.io/api/1.1/wf/whnotario/";
     const config = {
       headers: {
-        'Authorization': `Bearer ${process.env.TOKEN_API_GALILEA}`,  
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${process.env.TOKEN_API_GALILEA}`,
+        "Content-Type": "application/json",
+      },
     };
+    const base64Document = Buffer.from(file.buffer).toString("base64");
     const bodyAxios = {
       id,
       base64Document,
-      nroPagDoc: parseInt(pages.length)
+      nroPagDoc: parseInt(pages.length),
     };
-    axios.post(apiUrl, bodyAxios, config)
-    .then(response => {
-      console.log('Respuesta de la API:', response.data);
-    })
-    .catch(error =>{
-
-    console.error('Error al comunicarse con la API:', error);
-    errorMessage = 'Error al comunicarse con la API externa.';
-    if (error.response) {
-      errorMessage += ` Código de estado: ${error.response.status}`;
-    } else if (error.request) {
-      errorMessage += ' No se recibió respuesta del servidor.';
-    } else {
-      errorMessage += ` Mensaje de error: ${error.message}`;
-    }
-    })
-    .finally(() => {
-      // Esta sección no se ejecutará si se ha retornado anteriormente
-      session.endSession();
-    })
+    axios
+      .post(apiUrl, bodyAxios, config)
+      .then((response) => {
+        console.log("Respuesta de la API:", response.data);
+      })
+      .catch((error) => {
+        console.error("Error al comunicarse con la API:", error);
+        errorMessage = "Error al comunicarse con la API externa.";
+        if (error.response) {
+          errorMessage += ` Código de estado: ${error.response.status}`;
+        } else if (error.request) {
+          errorMessage += " No se recibió respuesta del servidor.";
+        } else {
+          errorMessage += ` Mensaje de error: ${error.message}`;
+        }
+      })
+      .finally(() => {
+        // Esta sección no se ejecutará si se ha retornado anteriormente
+        session.endSession();
+      });
     await session.commitTransaction();
     // actualizar el documento del cliente
     return res.status(200).json({
@@ -330,7 +419,10 @@ const changeStateDocumentFeaApi = async (req, res) => {
     await session.abortTransaction();
     return res.status(400).json({
       status: "error",
-      message: error ? error.message : errorMessage,
+      message: {
+        error: error ? error.message : "",
+        errorMessage: errorMessage ? errorMessage : "",
+      },
       data: {},
     });
   } finally {
@@ -341,17 +433,27 @@ const changeStateDocumentFeaApi = async (req, res) => {
 const getCertificatesDocuments = async (req, res) => {
   try {
     if (req.user.role !== "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        "No tiene permisos para realizar esta acción."
+      );
+      return;
     }
     const { id } = req.query;
     const document = await documentPDF.findById({ _id: id });
     // Convertir la cadena base64 en un buffer
+    // obtener el documento de aws s3
+    //* realiza la operación de conglomerado
+    const commandGet = new GetObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: document.idDocument,
+    });
+    const { Body } = await s3.send(commandGet);
+    const buffer = await Body.transformToByteArray();
+    const base64Contrato = Buffer.from(buffer).toString("base64");
     const documentLoad = await PDFDocument.load(
-      Buffer.from(document.base64Document, "base64")
+      Buffer.from(base64Contrato, "base64")
     );
     // Obtener el número de páginas
     const pages = documentLoad.getPages();

@@ -1,52 +1,59 @@
-import documentPDF from "../model/Pdf.js";
+// Importar modelos
+import DocumentPDF from "../model/Pdf.js";
 import Client from "../model/Clients.js";
+import DocumentTemplate from "../model/DocumentTemplate.js";
+// importar funciones de utilidades
 import {
   arrayBufferToBase64,
   formatDate,
-  formatValue,
 } from "../utils/converter.js";
-import { saveDocumentPdf } from "../helpers/index.js";
-import { PDFDocument, rgb } from "pdf-lib";
-import DocumentTemplate from "../model/DocumentTemplate.js";
+import {
+  generateValue,
+  saveDocumentPdf,
+  handleErrorResponse
+} from "../helpers/index.js";
+// importación de librerías
 import mongoose from "mongoose";
+import { PDFDocument, rgb } from "pdf-lib";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
+import s3 from "../config/s3.js";
+import { v4 } from "uuid";
 
 const addDocument = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const {
-      nameResponsible,
-      rutResponsible,
-      emailResponsible,
-      nameClient,
-      rutClient,
-      emailClient,
-      filenameDocument,
-      base64Document,
-      typeDocument,
-    } = req.body;
+    const { nameClient, rutClient, emailClient, typeDocument } = req.query;
+    const file = req.file;
+    // esto mientras no se usa
+
+    // variables utilizadas mas adelante para el proceso del documento en s3
+    let url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
     const client = await Client.findOne({ rutClient }).session(session);
-    const documentPdf = await documentPDF
-      .findOne({ rutClient })
-      .session(session);
+    // Check for API role
     if (req.user.role === "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        "No tiene permisos para realizar esta acción."
+      );
+      return;
     }
-    if (client) {
-      if (typeDocument === "Poliza") {
-        return res.status(400).json({
-          status: "error",
-          message: `No puede agregar una poliza en esta sección.`,
-          data: {},
-        });
-      }
+    // Check if client exists and typeDocument is "Poliza"
+    if (client && typeDocument === "Poliza") {
+      handleErrorResponse(
+        res,
+        400,
+        "No puede agregar una poliza en esta sección."
+      );
+      return;
     }
     // insertar en la bd Coleccion DocumentPDF
-    const filename = formatValue(filenameDocument);
+    const filename = generateValue(file.originalname);
     const state = (typeDocument) => {
       if (typeDocument === "Contrato") {
         return "Pendiente Poliza";
@@ -55,32 +62,46 @@ const addDocument = async (req, res) => {
         return "Certificado";
       }
     };
-
+    // insertar documento en s3 para obtener el link
+    const idDocument = v4();
+    const params = {
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+      Key: idDocument,
+    };
+    const command = new PutObjectCommand(params);
     if (!client) {
+      await s3.send(command);
+      const urlDocument = `${url}${idDocument}`;
       const result = await saveDocumentPdf(
-        req.body,
+        req.user,
+        req.query,
         state(typeDocument),
         typeDocument,
-        base64Document,
+        null,
+        urlDocument,
+        idDocument,
         filename,
-        "interno"
+        "interno",
+        session
       );
       let documents = [];
-      documents.push({
+       documents.push({
         _id: result._id,
         filename,
         typeDocument,
       });
-      const objectClient = new Client({
-        nameResponsible,
-        rutResponsible,
-        emailResponsible,
+      console.log(documents)
+      await Client.create({
+        nameResponsible: req.user.name,
+        rutResponsible: req.user.rut,
+        emailResponsible: req.user.email,
         nameClient,
         rutClient,
         emailClient,
         documents,
       });
-      await Client.create(objectClient);
       await session.commitTransaction();
       return res.status(200).json({
         status: "success",
@@ -97,19 +118,22 @@ const addDocument = async (req, res) => {
         (document) => document.typeDocument === "Contrato"
       );
       if (documentContract) {
-        return res.status(400).json({
-          status: "error",
-          message: `El cliente ya tiene un Contrato.`,
-          data: {},
-        });
+        handleErrorResponse(res, 400, "El cliente ya tiene un contrato.");
+        return;
       }
+      await s3.send(command);
+      const urlDocument = `${url}${file.originalname}`;
       const result = await saveDocumentPdf(
-        req.body,
+        req.user,
+        req.query,
         state(typeDocument),
         typeDocument,
-        base64Document,
+        null,
+        urlDocument,
+        idDocument,
         filename,
-        "interno"
+        "interno",
+        session
       );
       const document = {
         _id: result._id,
@@ -146,31 +170,34 @@ const generarConglomeradoTemplate = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const documentoFirma = await documentPDF
-      .findOne({ _id: id })
-      .session(session);
+    const documentoFirma = await DocumentPDF.findOne({ _id: id }).session(
+      session
+    );
     const documentoPlantilla = await DocumentTemplate.findById({
       _id: "654aeb3c674c514b13ade18d",
     }).session(session);
     if (req.user.role === "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        "No tiene permisos para realizar esta acción."
+      );
+      return;
     }
     if (!documentoFirma && !documentoPlantilla) {
-      return res.status(400).json({
-        status: "error",
-        message: `Documento no existe.`,
-        data: {},
-      });
+      handleErrorResponse(res, 400, "Documento no existe.");
+      return;
     }
     const conglomeradoPDF = await PDFDocument.create();
-
-    const documentSign = await PDFDocument.load(
-      Buffer.from(documentoFirma.base64Document, "base64")
-    );
+    // obtener el documento desde aws s3 a traves de idDocument
+    const command = new GetObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: documentoFirma.idDocument,
+    });
+    const { Body } = await s3.send(command);
+    const buffer = await Body.transformToByteArray();
+    const base64 = Buffer.from(buffer).toString("base64");
+    const documentSign = await PDFDocument.load(Buffer.from(base64, "base64"));
     const documentTemplate = await PDFDocument.load(
       Buffer.from(documentoPlantilla.base64Document, "base64")
     );
@@ -220,36 +247,41 @@ const changeStateConglomerado = async (req, res) => {
   try {
     // base64 del documento en el body
     const { id } = req.params;
-    const { base64 } = req.body;
+    const file = req.file;
+    // variables utilizadas mas adelante para el proceso del documento en s3
+    let url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
+    //  // obtener el documento desde aws s3 a traves de idDocument
+    //! obtener el documento de s3 y convertir el documento a base64
+    //  const command = new GetObjectCommand({
+    //   Bucket: process.env.AWS_BUCKET_NAME,
+    //   Key: documentoFirma.idDocument
+    // })
+    // const { Body } = await s3.send(command)
+    // const buffer = await Body.transformToByteArray();
+    // const base64 = Buffer.from(buffer).toString("base64");
+    //!aquí termina la obtención del documento
     // actualizar el estado del documento conglomerado
-    const document = await documentPDF.findOne({ _id: id }).session(session);
+    const base64 = Buffer.from(file.buffer).toString("base64");
+    const document = await DocumentPDF.findOne({ _id: id }).session(session);
     if (req.user.role === "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        "No tiene permisos para realizar esta acción."
+      );
+      return;
     }
     if (!document) {
-      return res.status(500).json({
-        status: "error",
-        message: `Registro no existe.`,
-        data: {},
-      });
+      handleErrorResponse(res, 500, "Registro no existe.");
+      return;
     }
     if (document.state === "Certificado") {
-      return res.status(500).json({
-        status: "error",
-        message: `Documento ya esta certificado.`,
-        data: {},
-      });
+      handleErrorResponse(res, 500, "Documento ya esta certificado.");
+      return;
     }
     if (document.state === "Pendiente Firma") {
-      return res.status(400).json({
-        status: "error",
-        message: `Documento no esta firmado.`,
-        data: {},
-      });
+      handleErrorResponse(res, 400, "Documento no esta firmado.");
+      return;
     }
     if (!document.state !== "Pendiente Certificación") {
       // actualizar el estado de el documento solo
@@ -268,23 +300,44 @@ const changeStateConglomerado = async (req, res) => {
         font: await documentC.embedFont("Helvetica"),
         color: rgb(0, 0, 0),
       });
-      // Guardar el documento
+      // Guardar el documento en un buffer
       const pdfBytes = await documentC.save();
-      const base64Document = Buffer.from(pdfBytes).toString("base64");
-      const documentCertificate = {
-        base64Document,
-        state: "Certificado",
+      //* actualizar el documento en aws s3
+      //? primero borramos el existente con el idDocument
+      const params = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: document.idDocument,
       };
-      await documentPDF.findOneAndUpdate({ _id: id }, documentCertificate, {
-        new: true,
-      });
+      await s3.send(new DeleteObjectCommand(params));
+      //? Ahora subiremos el nuevo documento
+      const paramsNew = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Body: pdfBytes,
+        ContentType: "application/pdf",
+        Key: document.idDocument,
+      };
+      await s3.send(new PutObjectCommand(paramsNew));
+      // actualizar el documento en la bd
+      const urlDocument = `${url}${document.idDocument}`;
+      const response = await DocumentPDF.findOneAndUpdate(
+        { _id: id },
+        {
+          $set: {
+            state: "Certificado",
+            urlDocument,
+          },
+        },
+        {
+          new: true,
+        }
+      ).session(session);
       await session.commitTransaction();
       // actualizar el documento del cliente
       return res.status(200).json({
         status: "success",
         message: `Documento Certificado.`,
         data: {
-          documentCertificate,
+          response,
         },
       });
     }
@@ -299,4 +352,5 @@ const changeStateConglomerado = async (req, res) => {
     session.endSession();
   }
 };
+
 export { addDocument, generarConglomeradoTemplate, changeStateConglomerado };

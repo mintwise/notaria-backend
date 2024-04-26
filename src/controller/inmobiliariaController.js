@@ -1,11 +1,21 @@
 // librerías
 import { PDFDocument } from "pdf-lib";
+import mongoose from "mongoose";
+import { v4 } from "uuid";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
+import s3 from "../config/s3.js";
 // funciones de utilidad
-import { arrayBufferToBase64, formatValue } from "../utils/converter.js";
+import { arrayBufferToBase64 } from "../utils/converter.js";
 import {
   saveDocumentPdf,
   updateDocumentPdf,
   signDocument,
+  handleErrorResponse,
+  generateValue,
 } from "../helpers/index.js";
 //modelos
 import Client from "../model/Clients.js";
@@ -13,64 +23,72 @@ import Pdf from "../model/Pdf.js";
 import User from "../model/User.js";
 import DocumentTemplate from "../model/DocumentTemplate.js";
 import InmobiliariaUser from "../model/InmobiliariaUser.js";
-import mongoose from "mongoose";
 
 const addDocument = async (req, res) => {
   // validar por rut del cliente si existe póliza para realizar conglomerado
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { rutClient, filenameDocument, typeDocument, base64Document } =
-      req.body;
+    const { rutClient, typeDocument } = req.query;
+    const file = req.file;
     const client = await Client.findOne({ rutClient }).session(session);
-    const contrato = await Pdf.findOne({ rutClient, typeDocument: "Contrato" }).session(session);
-    const poliza = await Pdf.findOne({ rutClient, typeDocument: "Poliza" }).session(session);
+    const contrato = await Pdf.findOne({
+      rutClient,
+      typeDocument: "Contrato",
+    }).session(session);
+    const poliza = await Pdf.findOne({
+      rutClient,
+      typeDocument: "Poliza",
+    }).session(session);
+    let url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
     if (!client) {
-      res.status(400).json({
-        status: "error",
-        message: "No existe cliente.",
-        data: {},
-      });
+      handleErrorResponse(res, 400, "No existe cliente.");
       return;
     }
     if (!contrato) {
-      res.status(400).json({
-        status: "error",
-        message: "No existe contrato.",
-        data: {},
-      });
+      handleErrorResponse(res, 400, "No existe contrato.");
       return;
     }
     if (poliza) {
-      res.status(400).json({
-        status: "error",
-        message: "La poliza ya fue ingresada.",
-        data: {},
-      });
+      handleErrorResponse(res, 400, "La póliza ya fue ingresada.");
       return;
     }
     if (req.user.role === "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        "No tiene permisos para realizar esta acción."
+      );
+      return;
     }
     // función que formatea el nombre del documento
-    const filename = formatValue(filenameDocument);
+    const filename = generateValue(file.originalname);
+    const idDocument = v4();
+    const urlDocument = `${url}${idDocument}`;
+    // Insertar en s3
+    const commandUploadPoliza = new PutObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: idDocument,
+      Body: file.buffer,
+      ContentType: "application/pdf",
+    });
+    await s3.send(commandUploadPoliza);
     //inserta la póliza en la bd PDF
-
     const polizaDocument = await saveDocumentPdf(
+      req.user,
       client,
       "Conglomerado Creado",
       typeDocument,
-      base64Document,
+      null,
+      urlDocument,
+      idDocument,
       filename,
-      "interno"
+      "interno",
+      session
     );
     // Cambia el estado del contrato a conglomerado
     contrato.state = "Conglomerado Creado";
-    await contrato.save({ new: true });
+    await contrato.save({ new: true }, { session });
     // guardar el documento en clients con la data que ya tiene
     const polizaDocumentClient = {
       _id: polizaDocument._id,
@@ -83,11 +101,20 @@ const addDocument = async (req, res) => {
     ).session(session);
     //* realiza la operación de conglomerado
     // extraemos la información de los Pdfs
+    // obtener el documento desde aws s3 a traves de idDocument
+    const commandGet = new GetObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: contrato.idDocument,
+    });
+    const { Body } = await s3.send(commandGet);
+    const buffer = await Body.transformToByteArray();
+    const base64Contrato = Buffer.from(buffer).toString("base64");
     const contratoPDF = await PDFDocument.load(
-      Buffer.from(contrato.base64Document, "base64")
+      Buffer.from(base64Contrato, "base64")
     );
+    const base64Poliza = Buffer.from(file.buffer).toString("base64");
     const polizaPDF = await PDFDocument.load(
-      Buffer.from(base64Document, "base64")
+      Buffer.from(base64Poliza, "base64")
     );
     //   se crea el pdf nuevo
     const conglomeradoPDF = await PDFDocument.create();
@@ -109,20 +136,34 @@ const addDocument = async (req, res) => {
     }
     const pdfBytes = await conglomeradoPDF.save();
     const base64conglomerado = arrayBufferToBase64(pdfBytes);
+    //insertar en aws s3
+    const idDocumentConglomerado = v4();
+    const commandUpload = new PutObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: idDocumentConglomerado,
+      Body: Buffer.from(base64conglomerado, "base64"),
+      ContentType: "application/pdf",
+    });
+    await s3.send(commandUpload);
     // insertar conglomerado en la bd
-
     const documentConglomerado = await saveDocumentPdf(
+      req.user,
       client,
       "Pendiente Firma",
       "Conglomerado",
-      base64conglomerado,
-      `${contrato.filenameDocument} - ${filename}`,
-      "interno"
+      null,
+      `${url}${idDocumentConglomerado}`,
+      idDocumentConglomerado,
+      generateValue(
+        `${file.originalname.split(".")[0]} - ${contrato.filenameDocument}`
+      ),
+      "interno",
+      session
     );
     // agregamos el documento conglomerado al cliente
     const documentConglomeradoClient = {
       _id: documentConglomerado._id,
-      filename: `${contrato.filenameDocument} - ${filename}`,
+      filename: documentConglomerado.filenameDocument,
       typeDocument: "Conglomerado",
     };
     await Client.updateOne(
@@ -139,46 +180,44 @@ const addDocument = async (req, res) => {
   } catch (error) {
     session.abortTransaction();
     return res.status(500).json({
-
       status: "error",
       message: `${error.message}`,
       data: {},
     });
-  }finally{
+  } finally {
     session.endSession();
   }
 };
 const signDocumentConglomerado = async (req, res) => {
-  const { signOne, email } = req.body;
-  const { id } = req.params;
+  const file = req.file;
+  const { id } = req.query;
 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const user = await User.findOne({ email }).session(session);
-    const conglomeradoDoc = await Pdf.findById({ _id: id }).session(session);
+    const user = await User.findOne({ email: req.user.email })
+      .lean()
+      .session(session);
+    const conglomeradoDoc = await Pdf.findById({ _id: id })
+      .lean()
+      .session(session);
     if (req.user.role === "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
+      handleErrorResponse(
+        res,
+        400,
+        "No tiene permisos para realizar esta acción."
+      );
+      return;
     }
     if (!user) {
-      return res.status(400).json({
-        status: "error",
-        message: `Usuario no existe.`,
-        data: {},
-      });
+      handleErrorResponse(res, 400, "Usuario no existe.");
+      return;
     }
     if (!conglomeradoDoc) {
-      return res.status(400).json({
-        status: "error",
-        message: `Documento no existe.`,
-        data: {},
-      });
+      handleErrorResponse(res, 400, "Documento no existe.");
+      return;
     }
-    // objetos con la informacion de las firmas de los usuarios
+    // objetos con la información de las firmas de los usuarios
     const signatureInfo = {
       1: {
         sign: {
@@ -199,16 +238,32 @@ const signDocumentConglomerado = async (req, res) => {
     };
     const userInmobiliaria = await InmobiliariaUser.findOne({
       name: user.name.toString(),
-    }).session(session);
-    //* extraer los datos
-    const documentConglomerado = await PDFDocument.load(
-      Buffer.from(conglomeradoDoc.base64Document, "base64")
-    );
+    })
+      .lean()
+      .session(session);
+    if (!userInmobiliaria) {
+      handleErrorResponse(res, 400, "Usuario Inmobiliaria no existe.");
+      return;
+    }
+    // //* extraer los datos
+    // obtener datos del conglomerado para buscar en s3
+    const commandGet = new GetObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: conglomeradoDoc.idDocument,
+    });
+    const { Body } = await s3.send(commandGet);
+    const buffer = await Body.transformToByteArray();
+    const base64Conglomerado = Buffer.from(buffer).toString("base64");
+    //* DOCUMENTO CONGLOMERADO QUE VA A SER FIRMADO
+    const documentConglomerado = await PDFDocument.load(base64Conglomerado);
+    // extraer el estado del documento
     const state = conglomeradoDoc.state;
     switch (state) {
       case "Pendiente Firma":
         if (userInmobiliaria.role === 1) {
-          const imageSignOne = await documentConglomerado.embedPng(signOne);
+          const imageSignOne = await documentConglomerado.embedPng(
+            Buffer.from(file.buffer).toString("base64")
+          );
           const signOneDims = imageSignOne.scale(0.1);
           // Agregamos el template al documento actual
           const templateFirmas = await DocumentTemplate.findById({
@@ -231,30 +286,41 @@ const signDocumentConglomerado = async (req, res) => {
             signOneDims,
             signatureInfo[1],
             documentConglomerado,
-            user,
+            req.user,
             "contrato"
           );
-          // guardar en pdf en la bd y el cliente
-          const result = await updateDocumentPdf(
-            "Pendiente Firma 2",
-            base64SignOne,
-            id,
-            conglomeradoDoc
-          );
+          // // guardar en pdf en la bd y el cliente
+          // //* actualizar el documento en aws s3
+          // //? primero borramos el existente con el idDocument
+          const params = {
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: conglomeradoDoc.idDocument,
+          };
+          await s3.send(new DeleteObjectCommand(params));
+          // //? Ahora subiremos el nuevo documento
+          const paramsNew = {
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Body: base64SignOne,
+            ContentType: "application/pdf",
+
+            Key: conglomeradoDoc.idDocument,
+          };
+          await s3.send(new PutObjectCommand(paramsNew));
+          // // actualizar el documento en la bd
+          await updateDocumentPdf("Pendiente Firma 2", id, session);
           await session.commitTransaction();
-          //* Buscamos el template en la bd y lo creamos
           return res.status(200).json({
             status: "success",
             message: `Firma 1 Realizada con éxito.`,
-            data: {
-            },
+            data: {},
           });
         }
         if (userInmobiliaria.role === 2) {
           // firmo el segundo
-          // creamos el template en la bd por primera vez
           // pendiente firma 1
-          const imageSignTwo = await documentConglomerado.embedPng(signOne);
+          const imageSignTwo = await documentConglomerado.embedPng(
+            Buffer.from(file.buffer).toString("base64")
+          );
           const signTwoDims = imageSignTwo.scale(0.1);
           // Agregamos el template al documento actual
           const templateFirmas = await DocumentTemplate.findById({
@@ -276,17 +342,27 @@ const signDocumentConglomerado = async (req, res) => {
             signTwoDims,
             signatureInfo[2],
             documentConglomerado,
-            user,
+            req.user,
             "contrato"
           );
           // guardar en pdf en la bd y el cliente
-          const result = await updateDocumentPdf(
-            "Pendiente Firma 1",
-            base64SignTwo,
-            id,
-            conglomeradoDoc
-          );
-          //* Creación del template
+          //* actualizar el documento en aws s3
+          //? primero borramos el existente con el idDocument
+          const params = {
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: conglomeradoDoc.idDocument,
+          };
+          await s3.send(new DeleteObjectCommand(params));
+          //? Ahora subiremos el nuevo documento
+          const paramsNew = {
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Body: base64SignTwo,
+            ContentType: "application/pdf",
+            Key: conglomeradoDoc.idDocument,
+          };
+          await s3.send(new PutObjectCommand(paramsNew));
+          // actualizar el documento en la bd
+          await updateDocumentPdf("Pendiente Firma 1", id, session);
           await session.commitTransaction();
           return res.status(200).json({
             status: "success",
@@ -296,63 +372,86 @@ const signDocumentConglomerado = async (req, res) => {
         }
         break;
       case "Pendiente Firma 1":
-          // firmar documento con firma 1
-          const imageSignOne = await documentConglomerado.embedPng(
-            Buffer.from(signOne, "base64")
-          );
-          const signOneDims = imageSignOne.scale(0.1);
-          const pages = documentConglomerado.getPages();
-          const base64SignOne = await signDocument(
-            pages,
-            imageSignOne,
-            signOneDims,
-            signatureInfo[1],
-            documentConglomerado,
-            user,
-            "contrato"
-          );
-          // guardar en pdf en la bd y el cliente
-          const result = await updateDocumentPdf(
-            "Pendiente Certificación",
-            base64SignOne,
-            id,
-            conglomeradoDoc
-          );
-          await session.commitTransaction();
-          return res.status(200).json({
-            status: "success",
-            message: `Firma 1 Realizada con éxito.`,
-            data: {},
-          });
+        const imageSignOne = await documentConglomerado.embedPng(file.buffer);
+        const signOneDims = imageSignOne.scale(0.1);
+        // obtener las paginas del documento
+        const pages = documentConglomerado.getPages();
+        //* firma de la pagina 8
+        const base64SignOne = await signDocument(
+          pages,
+          imageSignOne,
+          signOneDims,
+          signatureInfo[1],
+          documentConglomerado,
+          req.user,
+          "contrato"
+        );
+        // guardar en pdf en la bd y el cliente
+        //* actualizar el documento en aws s3
+        //? primero borramos el existente con el idDocument
+        const params1 = {
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: conglomeradoDoc.idDocument,
+        };
+        await s3.send(new DeleteObjectCommand(params1));
+        //? Ahora subiremos el nuevo documento
+        const paramsNew1 = {
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Body: base64SignOne,
+          ContentType: "application/pdf",
+          Key: conglomeradoDoc.idDocument,
+        };
+        await s3.send(new PutObjectCommand(paramsNew1));
+        // actualizar el documento en la bd
+        await updateDocumentPdf("Pendiente Certificación", id, session);
+        await session.commitTransaction();
+        return res.status(200).json({
+          status: "success",
+          message: `Firma 1 Realizada con éxito.`,
+          data: {},
+        });
+        break;
       case "Pendiente Firma 2":
-          // firmar documento con firma 1
-          const imageSignTwo = await documentConglomerado.embedPng(
-            Buffer.from(signOne, "base64")
-          );
-          const signTwoDims = imageSignTwo.scale(0.1);
-          const pages2 = documentConglomerado.getPages();
-          const base64SignTwo = await signDocument(
-            pages2,
-            imageSignTwo,
-            signTwoDims,
-            signatureInfo[2],
-            documentConglomerado,
-            user,
-            "contrato"
-          );
-          // guardar en pdf en la bd y el cliente
-          const result2 = await updateDocumentPdf(
-            "Pendiente Certificación",
-            base64SignTwo,
-            id,
-            conglomeradoDoc,
-          );
-          await session.commitTransaction();
-          return res.status(200).json({
-            status: "success",
-            message: `Firma 2 Realizada con éxito.`,
-            data: {},
-          });
+        // firmar documento con firma 1
+        const imageSignTwo = await documentConglomerado.embedPng(
+          Buffer.from(file.buffer, "base64")
+        );
+        const signTwoDims = imageSignTwo.scale(0.1);
+        const pages2 = documentConglomerado.getPages();
+        const base64SignTwo = await signDocument(
+          pages2,
+          imageSignTwo,
+          signTwoDims,
+          signatureInfo[2],
+          documentConglomerado,
+          req.user,
+          "contrato"
+        );
+        // guardar en pdf en la bd y el cliente
+        //* actualizar el documento en aws s3
+        //? primero borramos el existente con el idDocument
+        const params2 = {
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: conglomeradoDoc.idDocument,
+        };
+        await s3.send(new DeleteObjectCommand(params2));
+        //? Ahora subiremos el nuevo documento
+        const paramsNew2 = {
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Body: base64SignTwo,
+          ContentType: "application/pdf",
+          Key: conglomeradoDoc.idDocument,
+        };
+        await s3.send(new PutObjectCommand(paramsNew2));
+        // actualizar el documento en la bd
+        await updateDocumentPdf("Pendiente Certificación", id, session);
+        await session.commitTransaction();
+        return res.status(200).json({
+          status: "success",
+          message: `Firma 2 Realizada con éxito.`,
+          data: {},
+        });
+        break;
     }
   } catch (error) {
     await session.abortTransaction();
@@ -361,57 +460,8 @@ const signDocumentConglomerado = async (req, res) => {
       message: `${error.message}`,
       data: {},
     });
-  }finally{
-    await session.endSession();
-  }
-
-};
-const signDocumentTest = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    // Cargar la plantilla de documento
-    const { image } = req.body;
-    if (req.user.role === "API") {
-      return res.status(400).json({
-        status: "error",
-        message: `No tiene permisos para realizar esta acción.`,
-        data: {},
-      });
-    }
-    const template = await DocumentTemplate.findOne({
-      typeDocument: "Template",
-    }).session(session);
-    const templateBuffer = Buffer.from(template.base64Document, "base64");
-    const pdfDoc = await PDFDocument.load(templateBuffer);
-    const [page] = pdfDoc.getPages();
-
-    // Cargar la imagen de la firma
-    const imageBuffer = Buffer.from(image, "base64");
-    const pngImage = await pdfDoc.embedPng(imageBuffer);
-    const pngDims = pngImage.scale(0.1);
-    // Agregar la imagen a la página del documento
-    const { width, height } = page.getSize();
-    page.drawImage(pngImage, {
-      x: 100, // Ajusta la posición X según tus necesidades
-      y: 400, // Ajusta la posición Y según tus necesidades
-      width: pngDims.width / 2, // Ajusta el tamaño de la imagen
-      height: pngDims.height / 2, // Ajusta el tamaño de la imagen
-    });
-
-    // Guardar el documento firmado
-    const modifiedPdfBytes = await pdfDoc.save();
-    const base64ModifiedPdf = arrayBufferToBase64(modifiedPdfBytes);
-    return res.status(200).json(base64ModifiedPdf);
-  } catch (error) {
-    await session.abortTransaction();
-    return res.status(500).json({
-      status: "error",
-      message: `${error.message}`,
-      data: {},
-    });
-  }finally{
+  } finally {
     await session.endSession();
   }
 };
-export { addDocument, signDocumentConglomerado, signDocumentTest };
+export { addDocument, signDocumentConglomerado };

@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const documentPDF = new mongoose.Schema(
+const DocumentPDF = new mongoose.Schema(
   {
     nameResponsible: {
       type: String,
@@ -29,19 +29,28 @@ const documentPDF = new mongoose.Schema(
     },
     base64Document: {
       type: String,
+      default: null,
+    },
+    idDocument: {
+      type: String,
+      default: null,
+    },
+    url: {
+      type: String,
+      default: null,
     },
     typeDocument: {
       type: String,
     },
     canal: {
       type: String,
-      default: null
-    }
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-const Pdf = mongoose.model("DocumentPDF", documentPDF, "DocumentPDF");
+const Pdf = mongoose.model("DocumentPDF", DocumentPDF, "DocumentPDF");
 export default Pdf;

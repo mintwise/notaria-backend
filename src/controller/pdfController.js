@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import Client from "../model/Clients.js";
 import documentPDF from "../model/Pdf.js";
+import s3 from "../config/s3.js";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 
 const getPdf = async (req, res) => {
   const session = await mongoose.startSession();
@@ -79,8 +81,8 @@ const getPdfsFilter = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { rut, name, filter} = req.body;
-  
+    const { rut, name, filter } = req.body;
+
     if (req.user.role === "API") {
       return res.status(400).json({
         status: "error",
@@ -93,16 +95,26 @@ const getPdfsFilter = async (req, res) => {
       case rut:
         const result = await documentPDF.find(
           { rutClient: rut.trim() },
-          { nameClient: 1, rutClient: 1, typeDocument: 1, filenameDocument: 1, createdAt: 1, _id: 1, state: 1 }
+          {
+            nameClient: 1,
+            rutClient: 1,
+            typeDocument: 1,
+            filenameDocument: 1,
+            createdAt: 1,
+            _id: 1,
+            state: 1,
+          }
         );
-        
+
         let documents = [];
         if (filter) {
-          documents.push(result.filter(element => element.typeDocument === filter));
+          documents.push(
+            result.filter((element) => element.typeDocument === filter)
+          );
         } else {
           documents.push(result);
         }
-        
+
         await session.commitTransaction();
         return res.status(200).json({
           status: "success",
@@ -116,14 +128,16 @@ const getPdfsFilter = async (req, res) => {
           { nameClient: name },
           { nameClient: 1, rutClient: 1, typeDocument: 1, filenameDocument: 1 }
         );
-        
+
         let documentsName;
         if (filter) {
-          documentsName = resultName.filter(element => element.typeDocument === filter);
+          documentsName = resultName.filter(
+            (element) => element.typeDocument === filter
+          );
         } else {
           documentsName = resultName;
         }
-        
+
         await session.commitTransaction();
         return res.status(200).json({
           status: "success",
@@ -149,16 +163,19 @@ const getDocumentsRutFilter = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-        const result = await documentPDF.find({typeDocument: "Contrato"}, { nameClient: 1, rutClient: 1, filenameDocument: 1, _id: 1});
-        await session.commitTransaction();
-        return res.status(200).json({
-          status: "success",
-          message: `Documentos`,
-          data: {
-            documents: result,
-          },
-        });
-    } catch (error) {
+    const result = await documentPDF.find(
+      { typeDocument: "Contrato" },
+      { nameClient: 1, rutClient: 1, filenameDocument: 1, _id: 1 }
+    );
+    await session.commitTransaction();
+    return res.status(200).json({
+      status: "success",
+      message: `Documentos`,
+      data: {
+        documents: result,
+      },
+    });
+  } catch (error) {
     await session.abortTransaction();
     return res.status(500).json({
       status: "error",
@@ -168,7 +185,7 @@ const getDocumentsRutFilter = async (req, res) => {
   } finally {
     session.endSession;
   }
-}
+};
 
 const getCLientsByRut = async (req, res) => {
   const session = await mongoose.startSession();
@@ -312,6 +329,41 @@ const deleteDocument = async (req, res) => {
   }
 };
 
+const addTesting = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    let bucket = "document-storage-notaria";
+    let url = `https://${bucket}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
+    const file = req.file
+
+    const params = {
+      Bucket: bucket,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+      Key: file.originalname,
+    };
+    const command = new PutObjectCommand(params);
+    await s3.send(command);
+
+    await session.commitTransaction();
+    return res.status(200).json({
+      status: "success",
+      message: `Documento subido.`,
+      data: `${url}${file.originalname}`
+    })
+  } catch (error) {
+    await session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
 export {
   getPdf,
   getPdfs,
@@ -320,4 +372,5 @@ export {
   getDocumentsCertificate,
   getDocumentsRutFilter,
   deleteDocument,
+  addTesting,
 };

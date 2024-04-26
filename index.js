@@ -9,6 +9,7 @@ import routerNotaria from "./src/routes/notariaRoutes.js";
 import routerInmobiliaria from "./src/routes/inmobiliariaRoutes.js";
 import routerApi from "./src/routes/routerApi.js";
 import morgan from "morgan";
+import routerVehicles from "./src/routes/vehiclesRoutes.js";
 
 const app = express();
 // Connect a la BD
@@ -28,7 +29,9 @@ app.use(morgan("dev"));
 app.use("/", pdfRoutes);
 app.use("/notaria", routerNotaria);
 app.use("/inmobiliaria", routerInmobiliaria);
+app.use("/generic", routerVehicles);
 app.use("/api", routerApi);
+
 
 const PORT = process.env.PORT || 3000;
 
