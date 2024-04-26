@@ -12,10 +12,6 @@ import { autenticar, nuevoPassword, registrar } from "../controller/userControll
 import checkAuth from "../middleware/authMiddleware.js";
 import multer from "multer";
 const router = express.Router();
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-});
 // area publica
 router.post('/registrar',registrar);
 router.post('/login', autenticar);
@@ -28,7 +24,6 @@ router.get("/documents",checkAuth, getPdfs);
 router.get("/get-clients-by-rut", checkAuth, getCLientsByRut)
 router.delete("/document/:id", checkAuth, deleteDocument);
 
-router.route('/testing').post(upload.single("file"), addTesting)
 export default router;
 
 
