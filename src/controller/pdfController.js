@@ -329,41 +329,6 @@ const deleteDocument = async (req, res) => {
   }
 };
 
-const addTesting = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    let bucket = "document-storage-notaria";
-    let url = `https://${bucket}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
-    const file = req.file
-
-    const params = {
-      Bucket: bucket,
-      Body: file.buffer,
-      ContentType: file.mimetype,
-      Key: file.originalname,
-    };
-    const command = new PutObjectCommand(params);
-    await s3.send(command);
-
-    await session.commitTransaction();
-    return res.status(200).json({
-      status: "success",
-      message: `Documento subido.`,
-      data: `${url}${file.originalname}`
-    })
-  } catch (error) {
-    await session.abortTransaction();
-    return res.status(500).json({
-      status: "error",
-      message: `${error.message}`,
-      data: {},
-    });
-  } finally {
-    session.endSession();
-  }
-};
-
 export {
   getPdf,
   getPdfs,
