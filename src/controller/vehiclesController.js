@@ -3,7 +3,6 @@ import Pdf from "../model/Pdf.js";
 //librerías
 import mongoose from "mongoose";
 //funciones
-import { formatValue } from "../utils/converter.js";
 import {
   generateValue,
   handleErrorResponse,
@@ -13,6 +12,74 @@ import sendEmail from "../emails/sendEmail.js";
 import { v4 } from "uuid";
 import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import s3 from "../config/s3.js";
+import axios from "axios";
+
+const addDocumentApi = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { sellerInput, buyerInput, contractInput, vehicleInput } = req.body;
+    const file = req.file;
+    const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
+    //* PRIMER ENDPOINT
+    //obtener username y password
+    const bodyAxios = {
+      usuario: process.env.API_USERNAME,
+      clave: process.env.API_PASSWORD,
+    };
+    const apiUrl =
+      "https://www.notariosycbrs.cl/SrvcsRst/RstSrvcsXVhclsLgN.php";
+    // const config = {
+    //   headers: {
+    //     Authorization: `Bearer ${process.env.TOKEN_API_GALILEA}`,
+    //     "Content-Type": "application/json",
+    //   },
+    // };
+    axios
+      .post(apiUrl, bodyAxios)
+      .then((response) => {
+        console.log("Respuesta de la API:", response);
+      })
+      .catch((error) => {
+        console.error("Error al comunicarse con la API:", error);
+      })
+      .finally(() => {
+        // Esta sección no se ejecutará si se ha retornado anteriormente
+        session.endSession();
+      });
+    //* SEGUNDO ENDPOINT
+    //* TERCER ENDPOINT
+    //* CUARTO ENDPOINT
+    //* QUINTO ENDPOINT (nosotros)
+
+    // ENVIAR EMAIL DE CONFIRMACIÓN
+    // const datos = {
+    //   subject: "Creación De Documento Genérico",
+    //   name: nameResponsible,
+    //   message: `Se ha subido el documento "${filename
+    //     .trim()
+    //     .replace(/\.pdf$/, "")}" con éxito.`,
+    //   to: [emailResponsible, emailClient],
+    // };
+    // await sendEmail(datos);
+    // RESPUESTA DEL SERVIDOR
+    await session.commitTransaction();
+    return res.status(200).json({
+      status: "success",
+      message: `Creado con éxito.`,
+      data: {},
+    });
+  } catch (error) {
+    session.abortTransaction();
+    return res.status(500).json({
+      status: "error",
+      message: `${error.message}`,
+      data: {},
+    });
+  } finally {
+    session.endSession();
+  }
+};
 
 const listDocumentGeneric = async (req, res) => {
   const session = await mongoose.startSession();
@@ -278,4 +345,5 @@ export {
   addDocumentGeneric,
   editDocumentGeneric,
   deleteDocumentGeneric,
+  addDocumentApi,
 };

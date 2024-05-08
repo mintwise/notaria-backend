@@ -6,6 +6,7 @@ import {
   getDocumentGeneric,
   editDocumentGeneric,
   deleteDocumentGeneric,
+  addDocumentApi,
 } from "../controller/vehiclesController.js";
 import checkAuth from "../middleware/authMiddleware.js";
 
@@ -14,7 +15,8 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
 });
-
+// rutas para documentos motorizados
+routerVehicles.route("/add").post(checkAuth, upload.single('file'), addDocumentApi);
 // rutas documento genérico
 routerVehicles
   .route("/list")
@@ -31,5 +33,11 @@ routerVehicles
 routerVehicles
   .route("/delete")
   .delete(checkAuth, deleteDocumentGeneric);
+
+
+//API TESTING
+routerVehicles
+.route("/add-document-api")
+.post(checkAuth, upload.single('file'), addDocumentApi);
 
 export default routerVehicles;

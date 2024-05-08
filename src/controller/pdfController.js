@@ -1,8 +1,9 @@
 import mongoose from "mongoose";
 import Client from "../model/Clients.js";
 import documentPDF from "../model/Pdf.js";
-import s3 from "../config/s3.js";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import axios from "axios";
+import FormData from "form-data";
+import { PDFDocument } from "pdf-lib";
 
 const getPdf = async (req, res) => {
   const session = await mongoose.startSession();
@@ -329,6 +330,15 @@ const deleteDocument = async (req, res) => {
   }
 };
 
+// const testingEndpoint = async (req, res) => {
+
+//   res.status(200).json({
+//     status: "success",
+//     message: `Endpoint de prueba.`,
+//     data: pdfBuffer,
+//   });
+// };
+
 export {
   getPdf,
   getPdfs,
@@ -337,5 +347,5 @@ export {
   getDocumentsCertificate,
   getDocumentsRutFilter,
   deleteDocument,
-  addTesting,
+  // testingEndpoint,
 };

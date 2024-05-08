@@ -16,7 +16,12 @@ import mongoose from "mongoose";
 import axios from "axios";
 import { v4 } from "uuid";
 import s3 from "../config/s3.js";
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
+import FormData from "form-data";
 
 const addDocumentApi = async (req, res) => {
   const session = await mongoose.startSession();
@@ -222,14 +227,36 @@ const addDocumentFeaApi = async (req, res) => {
       );
       return;
     }
-    // subir documento en amazon
+    //? llamar endpoint para compresión de pdf
+    var data = new FormData();
+    const fileBuffer = Buffer.from(file.buffer);
+    data.append("file", fileBuffer, file.originalname);
+    data.append("compression_level", "high");
+    data.append("output", "compressed_pdf");
+    var config = {
+      method: "post",
+      maxBodyLength: Infinity,
+      url: "https://api.pdfrest.com/compressed-pdf",
+      headers: {
+        "Api-Key": "d727e6b8-4c98-4163-9dbf-2713290504bc",
+        ...data.getHeaders(),
+      },
+      data: data,
+    };
+    const response = await axios(config);
+    //? procedemos a descargar el documento optimizado
+    const urlOptimized = response.data.outputUrl;
+    const responseOptimized = await axios.get(urlOptimized,
+    { responseType: "arraybuffer" });
+    const newFile = Buffer.from(responseOptimized.data);
+    //? subir documento en amazon
     const idDocument = v4();
     const urlDocument = `${url}${idDocument}`;
-    // Insertar en s3
+    //? Insertar en s3
     const command = new PutObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: idDocument,
-      Body: file.buffer,
+      Body: newFile,
       ContentType: "application/pdf",
     });
     await s3.send(command);
@@ -245,9 +272,8 @@ const addDocumentFeaApi = async (req, res) => {
       "externo",
       session
     );
-    const documentLoad = await PDFDocument.load(
-      Buffer.from(file.buffer).toString("base64")
-    );
+     const base64 = Buffer.from(responseOptimized.data).toString("base64");
+     const documentLoad = await PDFDocument.load(base64);
     // Obtener el número de páginas
     const pages = documentLoad.getPages();
     if (!client) {
@@ -304,7 +330,6 @@ const addDocumentFeaApi = async (req, res) => {
     }
   } catch (error) {
     await session.abortTransaction();
-    console.log(error)
     return res.status(400).json({
       status: "error",
       message: `${error.message}`,
