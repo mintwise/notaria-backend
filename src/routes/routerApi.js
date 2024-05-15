@@ -16,12 +16,8 @@ const upload = multer({
 });
 
 // area privada enfocada en la notaria
-routerApi
-  .route("/upload-document")
-  .post(checkAuth, upload.single("file"), addDocumentApi);
-routerApi
-  .route("/upload-document-fea")
-  .post(checkAuth, upload.single("file"), addDocumentFeaApi);
+routerApi.route("/upload-document").post(checkAuth, addDocumentApi);
+routerApi.route("/upload-document-fea").post(checkAuth, addDocumentFeaApi);
 routerApi
   .route("/update-document-fea")
   .post(checkAuth, upload.single("file"), changeStateDocumentFeaApi);

@@ -21,8 +21,9 @@ import {
   GetObjectCommand,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
-import FormData from "form-data";
+import { compressPdf } from "../utils/converter.js";
 
+//#region CONGLOMERADOS
 const addDocumentApi = async (req, res) => {
   const session = await mongoose.startSession();
   try {
@@ -34,10 +35,14 @@ const addDocumentApi = async (req, res) => {
       nameClient,
       rutClient,
       emailClient,
+      filenameDocument,
+      base64Document,
       typeDocument,
-    } = req.query;
-    const file = req.file;
+    } = req.body;
+    //TODO devolver a base64 en el request body
     let url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
+    const filename = generateValue(filenameDocument);
+    const client = await Client.findOne({ rutClient });
     if (req.user.role !== "API") {
       handleErrorResponse(
         res,
@@ -54,8 +59,22 @@ const addDocumentApi = async (req, res) => {
       );
       return;
     }
-    const filename = generateValue(file?.originalname);
-    const client = await Client.findOne({ rutClient });
+
+    if (client?.documents?.length) {
+      const isDuplicate = client.documents.some(
+        (doc) => doc.filename === filename
+      );
+      if (isDuplicate) {
+        handleErrorResponse(
+          res,
+          400,
+          `Ya existe un documento con el nombre ${filename}.`
+        );
+        return;
+      }
+    }
+    const newFile = await compressPdf(base64Document, filename);
+
     // subir documento en amazon
     const idDocument = v4();
     const urlDocument = `${url}${idDocument}`;
@@ -63,7 +82,7 @@ const addDocumentApi = async (req, res) => {
     const command = new PutObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: idDocument,
-      Body: file.buffer,
+      Body: newFile,
       ContentType: "application/pdf",
     });
     await s3.send(command);
@@ -77,12 +96,13 @@ const addDocumentApi = async (req, res) => {
       rutClient,
       emailClient,
     };
+    const newBase64 = Buffer.from(newFile).toString("base64");
     const result = await saveDocumentPdf(
       usuario,
       cliente,
       "Pendiente Firma",
       typeDocument,
-      null,
+      newBase64,
       urlDocument,
       idDocument,
       filename,
@@ -119,18 +139,6 @@ const addDocumentApi = async (req, res) => {
     }
     // insertar en la bd Colección Clients
     if (client.documents.length) {
-      const isDuplicate = client.documents.some(
-        (doc) => doc.filename === filename
-      );
-
-      if (isDuplicate) {
-        return res.status(400).json({
-          status: "error",
-          message: `Ya existe un documento con el nombre ${filename}.`,
-          data: {},
-        });
-      }
-
       const document = {
         _id: result._id,
         filename,
@@ -140,6 +148,7 @@ const addDocumentApi = async (req, res) => {
         { rutClient },
         { $push: { documents: document } }
       );
+
       await session.commitTransaction();
       return res.status(200).json({
         status: "success",
@@ -152,6 +161,7 @@ const addDocumentApi = async (req, res) => {
       });
     }
   } catch (error) {
+    console.log(error);
     session.abortTransaction();
     return res.status(500).json({
       status: "error",
@@ -163,6 +173,7 @@ const addDocumentApi = async (req, res) => {
   }
 };
 
+//#region FEA DOCUMENT
 const addDocumentFeaApi = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -174,9 +185,11 @@ const addDocumentFeaApi = async (req, res) => {
       nameClient,
       rutClient,
       emailClient,
+      filenameDocument,
+      base64Document,
       typeDocument,
-    } = req.query;
-    const file = req.file;
+    } = req.body;
+    //TODO devolver de nuevo a base64
     let url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
 
     if (req.user.role !== "API") {
@@ -195,7 +208,7 @@ const addDocumentFeaApi = async (req, res) => {
       );
       return;
     }
-    const filename = generateValue(file?.originalname);
+    const filename = generateValue(filenameDocument);
     const client = await Client.findOne({ rutClient });
     if (!client) {
       handleErrorResponse(
@@ -227,28 +240,7 @@ const addDocumentFeaApi = async (req, res) => {
       );
       return;
     }
-    //? llamar endpoint para compresión de pdf
-    var data = new FormData();
-    const fileBuffer = Buffer.from(file.buffer);
-    data.append("file", fileBuffer, file.originalname);
-    data.append("compression_level", "high");
-    data.append("output", "compressed_pdf");
-    var config = {
-      method: "post",
-      maxBodyLength: Infinity,
-      url: "https://api.pdfrest.com/compressed-pdf",
-      headers: {
-        "Api-Key": "d727e6b8-4c98-4163-9dbf-2713290504bc",
-        ...data.getHeaders(),
-      },
-      data: data,
-    };
-    const response = await axios(config);
-    //? procedemos a descargar el documento optimizado
-    const urlOptimized = response.data.outputUrl;
-    const responseOptimized = await axios.get(urlOptimized,
-    { responseType: "arraybuffer" });
-    const newFile = Buffer.from(responseOptimized.data);
+    const newFile = await compressPdf(base64Document, filename);
     //? subir documento en amazon
     const idDocument = v4();
     const urlDocument = `${url}${idDocument}`;
@@ -260,20 +252,20 @@ const addDocumentFeaApi = async (req, res) => {
       ContentType: "application/pdf",
     });
     await s3.send(command);
+    const newBase64 = Buffer.from(newFile).toString("base64");
     const result = await saveDocumentPdf(
       usuario,
       cliente,
       "Pendiente Revisión",
       typeDocument,
-      null,
+      newBase64,
       urlDocument,
       idDocument,
       filename,
       "externo",
       session
     );
-     const base64 = Buffer.from(responseOptimized.data).toString("base64");
-     const documentLoad = await PDFDocument.load(base64);
+    const documentLoad = await PDFDocument.load(newBase64);
     // Obtener el número de páginas
     const pages = documentLoad.getPages();
     if (!client) {
@@ -339,14 +331,15 @@ const addDocumentFeaApi = async (req, res) => {
     session.endSession();
   }
 };
-
+//#region UPDATE FEA
 const changeStateDocumentFeaApi = async (req, res) => {
+  let errorMessage;
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const file = req.file;
     const { id } = req.query;
-    let errorMessage;
+    const file = req.file;
+    //TODO: cambiar a base64
     if (req.user.role !== "AdminNotaria") {
       handleErrorResponse(
         res,
@@ -369,11 +362,6 @@ const changeStateDocumentFeaApi = async (req, res) => {
       handleErrorResponse(res, 400, `documento revisado.`);
       return;
     }
-    // cargar documento pdf en la librería para obtener las paginas
-    const documentLoad = await PDFDocument.load(
-      Buffer.from(file.buffer).toString("base64")
-    );
-    const pages = documentLoad.getPages();
     // actualizar el documento en el cliente y el documento
     //* actualizar el documento en aws s3
     //? primero borramos el existente con el idDocument
@@ -407,7 +395,12 @@ const changeStateDocumentFeaApi = async (req, res) => {
         "Content-Type": "application/json",
       },
     };
+    // cargar documento pdf en la librería para obtener las paginas
+    const documentLoad = await PDFDocument.load(
+      Buffer.from(file.buffer).toString("base64")
+    );
     const base64Document = Buffer.from(file.buffer).toString("base64");
+    const pages = documentLoad.getPages();
     const bodyAxios = {
       id,
       base64Document,
@@ -466,7 +459,7 @@ const getCertificatesDocuments = async (req, res) => {
       return;
     }
     const { id } = req.query;
-    const document = await documentPDF.findById({ _id: id });
+    const document = await documentPDF.findById({ _id: id }).lean();
     // Convertir la cadena base64 en un buffer
     // obtener el documento de aws s3
     //* realiza la operación de conglomerado
@@ -489,12 +482,15 @@ const getCertificatesDocuments = async (req, res) => {
         data: {},
       });
     }
+    const { createdAt, updatedAt, __v, idDocument, url, ...documentResponse } =
+      document;
+    //TODO MOSTRAR EL DOCUMENTO EN BASE64
     return res.status(200).json({
       status: "200",
       message: `Documentos Certificados.`,
       data: {
         pages: pages.length,
-        document,
+        documentResponse,
       },
     });
   } catch (error) {

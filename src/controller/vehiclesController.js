@@ -13,53 +13,193 @@ import { v4 } from "uuid";
 import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import s3 from "../config/s3.js";
 import axios from "axios";
-
+//#region API ICONO
 const addDocumentApi = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { sellerInput, buyerInput, contractInput, vehicleInput } = req.body;
+    const {
+      // datos Vendedor
+      vendedorEsComunidad,
+      rutVendedor1,
+      apellidoPaternoRazonVendedor1,
+      apellidoMaternoVendedor1,
+      nombresVendedor1,
+      idTipoVendedor1,
+      calleDomicilioVendedor1,
+      numeroDomicilioVendedor1,
+      infoAddDomicilioVendedor1,
+      idComunaVendedor1,
+      celularVendedor1,
+      mailVendedor1,
+      // Comprador
+      rutComprador,
+      apellidoPaternoRazonComprador,
+      apellidoMaternoComprador,
+      nombresComprador,
+      idTipoComprador,
+      calleDomicilioComprador,
+      numeroDomicilioComprador,
+      infoAddDomicilioComprador,
+      idComunaComprador,
+      celularComprador,
+      mailComprador,
+      CompradorEsComunidad,
+      // Contrato
+      idNotarioRepertorio,
+      numeroRepertorioVehiculo,
+      precioVentaVehiculo,
+      avaluoFiscalVehiculo,
+      idTipoDocumento,
+      numeroDocumentoSTEV,
+      idLugarSRCEI,
+      fechaRepertorio,
+      fechaDocumento,
+      impuestoVehiculo,
+      CID,
+      //Vehículo
+      idTipoVehiculo,
+      marcaVehiculo,
+      anoVehiculo,
+      modeloVehiculo,
+      colorVehiculo,
+      numeroMotorVehiculo,
+      numeroChasisVehiculo,
+      numeroSerieVehiculo,
+      numeroVinVehiculo,
+      placaPatenteVehiculo,
+    } = req.body;
     const file = req.file;
+
     const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
     //* PRIMER ENDPOINT
     //obtener username y password
-    const bodyAxios = {
-      usuario: process.env.API_USERNAME,
-      clave: process.env.API_PASSWORD,
+    const formData = {
+      usuarioVehiculos: process.env.API_USERNAME,
+      passUsuarioVehiculos: process.env.API_PASSWORD,
     };
+    // llamada a la api
     const apiUrl =
       "https://www.notariosycbrs.cl/SrvcsRst/RstSrvcsXVhclsLgN.php";
-    // const config = {
-    //   headers: {
-    //     Authorization: `Bearer ${process.env.TOKEN_API_GALILEA}`,
-    //     "Content-Type": "application/json",
-    //   },
-    // };
-    axios
-      .post(apiUrl, bodyAxios)
-      .then((response) => {
-        console.log("Respuesta de la API:", response);
-      })
-      .catch((error) => {
-        console.error("Error al comunicarse con la API:", error);
-      })
-      .finally(() => {
-        // Esta sección no se ejecutará si se ha retornado anteriormente
-        session.endSession();
-      });
-    //* SEGUNDO ENDPOINT
-    //* TERCER ENDPOINT
-    //* CUARTO ENDPOINT
-    //* QUINTO ENDPOINT (nosotros)
+    const responseToken = await axios.post(apiUrl, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    // console.log(responseToken.data, "response 1 data------------------------------------")
+    //obtener token
+    const token = responseToken.data.find(
+      (element) => "tokenVehiculos" in element
+    );
+    console.log(token)
 
+    //* SEGUNDO ENDPOINT
+    // se inicia un formdata para enviar los datos
+    const formData2 = new FormData();
+    const DatosVendedor = {
+      vendedorEsComunidad: parseInt(vendedorEsComunidad),
+      rutVendedor1,
+      apellidoPaternoRazonVendedor1,
+      apellidoMaternoVendedor1,
+      nombresVendedor1,
+      idTipoVendedor1: parseInt(idTipoVendedor1),
+      calleDomicilioVendedor1,
+      numeroDomicilioVendedor1,
+      infoAddDomicilioVendedor1,
+      idComunaVendedor1: parseInt(idComunaVendedor1),
+      celularVendedor1,
+      mailVendedor1,
+    };
+    const DatosComprador = {
+      rutComprador,
+      apellidoPaternoRazonComprador,
+      apellidoMaternoComprador,
+      nombresComprador,
+      idTipoComprador: parseInt(idTipoComprador),
+      calleDomicilioComprador,
+      numeroDomicilioComprador,
+      infoAddDomicilioComprador,
+      idComunaComprador: parseInt(idComunaComprador),
+      celularComprador,
+      mailComprador,
+      CompradorEsComunidad: parseInt(CompradorEsComunidad),
+    };
+    const DatosContrato = {
+      idNotarioRepertorio: parseInt(idNotarioRepertorio),
+      numeroRepertorioVehiculo: parseInt(numeroRepertorioVehiculo),
+      precioVentaVehiculo: parseInt(precioVentaVehiculo),
+      avaluoFiscalVehiculo: parseInt(avaluoFiscalVehiculo),
+      idTipoDocumento:  parseInt(idTipoDocumento),
+      numeroDocumentoSTEV: parseInt(numeroDocumentoSTEV),
+      idLugarSRCEI: parseInt(idLugarSRCEI),
+      fechaRepertorio: new Date(fechaRepertorio).toISOString().slice(0, 10),
+      fechaDocumento: new Date(fechaDocumento).toISOString().slice(0, 10),
+      impuestoVehiculo: parseInt(impuestoVehiculo),
+      CID,
+    };
+    const DatosVehículo = {
+      idTipoVehiculo: parseInt(idTipoVehiculo),
+      marcaVehiculo,
+      anoVehiculo: parseInt(anoVehiculo),
+      modeloVehiculo,
+      colorVehiculo,
+      numeroMotorVehiculo,
+      numeroChasisVehiculo,
+      numeroSerieVehiculo,
+      numeroVinVehiculo,
+      placaPatenteVehiculo
+    };
+    // se agregan los datos al form-data
+    formData2.append("tokenVehiculos", token.tokenVehiculos);
+    formData2.append("DatosVendedor", JSON.stringify(DatosVendedor));
+    formData2.append("DatosComprador", JSON.stringify(DatosComprador));
+    formData2.append("DatosContrato", JSON.stringify(DatosContrato));
+    formData2.append("DatosVehículo", JSON.stringify(DatosVehículo));
+    // llamada a la api
+    const apiUrl2 = "https://www.notariosycbrs.cl/SrvcsRst/NyctRprtrs.php";
+    const config2 = {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    };
+    const responseApi2 = await axios.post(apiUrl2, formData2, config2)
+    console.log(responseApi2, "response 2 data------------------------------------")
+    console.log(typeof responseApi2.data, "response 2 data------------------------------------")
+
+
+    //* TERCER ENDPOINT
+    const apiUrl3 = "https://www.notariosycbrs.cl/SrvcsRst/CrgRchv.php";
+    const formData3 = new FormData();
+    formData3.append("tokenVehiculos", token.tokenVehiculos);
+    //! ACA se debe adjuntar la respuesta del segundo endpoint pero como responseApi2.data es un String se debe confirmar
+    formData3.append("idRepertorioVehiculo", 23456);
+    //! --------------------------------------------------------------------------------------------------------------
+    const blob = new Blob([file.buffer], { type: "application/pdf" });
+    formData3.append("archivo", blob, file.originalname);
+    const responseApi3 = await axios.post(apiUrl3, formData3, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    // console.log(responseApi3.data, "response 3 data------------------------------------");
+    //* CUARTO ENDPOINT
+    const apiUrl4 = "https://www.notariosycbrs.cl/SrvcsRst/CnsltStd.php";
+    const formData4 = new FormData();
+    formData4.append("tokenVehiculos", token.tokenVehiculos);
+    formData4.append("idRepertorioVehiculo", 23456);
+    const responseApi4 = await axios.post(apiUrl4, formData4, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    // console.log(responseApi4.data, "response 4 data------------------------------------");
+    //* QUINTO ENDPOINT (nosotros)
     // ENVIAR EMAIL DE CONFIRMACIÓN
     // const datos = {
     //   subject: "Creación De Documento Genérico",
-    //   name: nameResponsible,
-    //   message: `Se ha subido el documento "${filename
+    //   name: "Notaria Camilla",
+    //   message: `Se ha subido el documento "${file.originalname
     //     .trim()
     //     .replace(/\.pdf$/, "")}" con éxito.`,
-    //   to: [emailResponsible, emailClient],
+    //   to: [mailVendedor1, mailComprador],
     // };
     // await sendEmail(datos);
     // RESPUESTA DEL SERVIDOR
@@ -80,7 +220,7 @@ const addDocumentApi = async (req, res) => {
     session.endSession();
   }
 };
-
+// #region DOCUMENTOS GENÉRICOS
 const listDocumentGeneric = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -194,16 +334,16 @@ const addDocumentGeneric = async (req, res) => {
       "interno",
       session
     );
-    // ENVIAR EMAIL DE CONFIRMACIÓN
-    const datos = {
-      subject: "Creación De Documento Genérico",
-      name: nameResponsible,
-      message: `Se ha subido el documento "${filename
-        .trim()
-        .replace(/\.pdf$/, "")}" con éxito.`,
-      to: [emailResponsible, emailClient],
-    };
-    await sendEmail(datos);
+    // // ENVIAR EMAIL DE CONFIRMACIÓN
+    // const datos = {
+    //   subject: "Creación De Documento ${typeDocument}",
+    //   name: nameResponsible,
+    //   message: `Se ha subido el documento "${filename
+    //     .trim()
+    //     .replace(/\.pdf$/, "")}" con éxito.`,
+    //   to: [emailResponsible, emailClient],
+    // };
+    // await sendEmail(datos);
     // await sendEmailTest(datos);
     // RESPUESTA DEL SERVIDOR
     await session.commitTransaction();

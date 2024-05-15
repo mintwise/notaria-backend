@@ -20,7 +20,7 @@ const sendEmail = async (datos) => {
     `;
     correo.sender = {
       name: "Firma Notarial",
-      email: "firmanotarial@notariacamilla.cl",
+      email: "firmanotarial@firmanotarial.cl",
     };
     correo.to = datos.to.map((destinatario) => ({ email: destinatario }));
     if (datos.base64Document) {

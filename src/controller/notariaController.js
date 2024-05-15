@@ -5,6 +5,7 @@ import DocumentTemplate from "../model/DocumentTemplate.js";
 // importar funciones de utilidades
 import {
   arrayBufferToBase64,
+  compressPdf,
   formatDate,
 } from "../utils/converter.js";
 import {
@@ -62,12 +63,14 @@ const addDocument = async (req, res) => {
         return "Certificado";
       }
     };
+    // comprimir el pdf
+    const newFile = await compressPdf(Buffer.from(file.buffer).toString("base64"), filename);
     // insertar documento en s3 para obtener el link
     const idDocument = v4();
     const params = {
       Bucket: process.env.AWS_BUCKET_NAME,
-      Body: file.buffer,
-      ContentType: file.mimetype,
+      Body: newFile,
+      ContentType: "application/pdf",
       Key: idDocument,
     };
     const command = new PutObjectCommand(params);
@@ -92,7 +95,6 @@ const addDocument = async (req, res) => {
         filename,
         typeDocument,
       });
-      console.log(documents)
       await Client.create({
         nameResponsible: req.user.name,
         rutResponsible: req.user.rut,
@@ -122,7 +124,7 @@ const addDocument = async (req, res) => {
         return;
       }
       await s3.send(command);
-      const urlDocument = `${url}${file.originalname}`;
+      const urlDocument = `${url}${idDocument}`;
       const result = await saveDocumentPdf(
         req.user,
         req.query,

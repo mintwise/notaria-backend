@@ -1,4 +1,6 @@
-import zlib from "zlib";
+import axios from "axios";
+import FormData from "form-data";
+import { Readable } from "stream";
 
 export const formatValue = (value) => {
   // Elimina caracteres especiales y acentos
@@ -59,3 +61,51 @@ export const formatDate = () => {
 
   return `El ${day} de ${month} del ${year}, a las ${hours}:${minutes}:${seconds} Horas.`;
 };
+
+export const compressPdf = async (base64, filenameDocument) => { 
+  if (base64) {
+    const fileBuffer = Buffer.from(base64, "base64");
+
+    // Convierte el buffer en un stream
+    const fileStream = new Readable();
+    fileStream.push(fileBuffer);
+    fileStream.push(null);
+    
+    // Crea una nueva instancia de FormData y añade el stream del PDF y los parámetros a ella
+    var data = new FormData();
+    data.append("file", fileStream, {
+      filename: "file.pdf",
+      contentType: "application/pdf",
+    });
+      // Calcula el tamaño del archivo en MB
+      const fileSizeInMB = fileBuffer.length / (1024 * 1024);
+  
+      // Establece el nivel de compresión basado en el tamaño del archivo
+      if (fileSizeInMB >= 5) {
+        data.append("compression_level", "high");
+      } else if(fileSizeInMB >= 2 && fileSizeInMB < 5) {
+        data.append("compression_level", "medium");
+      } else {
+        data.append("compression_level", "low");
+      }
+      data.append("output", "comprimido_pdf");
+  
+      var config = {
+        method: "post",
+        maxBodyLength: Infinity,
+        url: "https://api.pdfrest.com/compressed-pdf",
+        headers: {
+          "Api-Key": "d727e6b8-4c98-4163-9dbf-2713290504bc",
+          ...data.getHeaders(),
+        },
+        data: data,
+      };
+      const response = await axios(config);
+      //? procedemos a descargar el documento optimizado
+      const urlOptimized = response.data.outputUrl;
+      const responseOptimized = await axios.get(urlOptimized, {
+        responseType: "arraybuffer",
+      });
+    return responseOptimized?.data;
+     }
+}

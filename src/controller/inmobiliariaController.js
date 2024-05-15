@@ -9,7 +9,7 @@ import {
 } from "@aws-sdk/client-s3";
 import s3 from "../config/s3.js";
 // funciones de utilidad
-import { arrayBufferToBase64 } from "../utils/converter.js";
+import { arrayBufferToBase64, compressPdf } from "../utils/converter.js";
 import {
   saveDocumentPdf,
   updateDocumentPdf,
@@ -27,8 +27,8 @@ import InmobiliariaUser from "../model/InmobiliariaUser.js";
 const addDocument = async (req, res) => {
   // validar por rut del cliente si existe póliza para realizar conglomerado
   const session = await mongoose.startSession();
-  session.startTransaction();
   try {
+    session.startTransaction();
     const { rutClient, typeDocument } = req.query;
     const file = req.file;
     const client = await Client.findOne({ rutClient }).session(session);
@@ -61,15 +61,17 @@ const addDocument = async (req, res) => {
       );
       return;
     }
-    // función que formatea el nombre del documento
-    const filename = generateValue(file.originalname);
+        // función que formatea el nombre del documento
+        const filename = generateValue(file.originalname);
+    // compresión del pdf
+    const newFile = await compressPdf(Buffer.from(file.buffer).toString('base64'), filename);
     const idDocument = v4();
     const urlDocument = `${url}${idDocument}`;
     // Insertar en s3
     const commandUploadPoliza = new PutObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: idDocument,
-      Body: file.buffer,
+      Body: newFile,
       ContentType: "application/pdf",
     });
     await s3.send(commandUploadPoliza);
@@ -100,7 +102,6 @@ const addDocument = async (req, res) => {
       { $push: { documents: polizaDocumentClient } }
     ).session(session);
     //* realiza la operación de conglomerado
-    // extraemos la información de los Pdfs
     // obtener el documento desde aws s3 a traves de idDocument
     const commandGet = new GetObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
@@ -112,7 +113,7 @@ const addDocument = async (req, res) => {
     const contratoPDF = await PDFDocument.load(
       Buffer.from(base64Contrato, "base64")
     );
-    const base64Poliza = Buffer.from(file.buffer).toString("base64");
+    const base64Poliza = Buffer.from(newFile).toString("base64");
     const polizaPDF = await PDFDocument.load(
       Buffer.from(base64Poliza, "base64")
     );
@@ -136,12 +137,13 @@ const addDocument = async (req, res) => {
     }
     const pdfBytes = await conglomeradoPDF.save();
     const base64conglomerado = arrayBufferToBase64(pdfBytes);
+    const newFile2 = await compressPdf(base64conglomerado, "conglomerado");
     //insertar en aws s3
     const idDocumentConglomerado = v4();
     const commandUpload = new PutObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: idDocumentConglomerado,
-      Body: Buffer.from(base64conglomerado, "base64"),
+      Body: newFile2,
       ContentType: "application/pdf",
     });
     await s3.send(commandUpload);
@@ -170,7 +172,6 @@ const addDocument = async (req, res) => {
       { rutClient },
       { $push: { documents: documentConglomeradoClient } }
     ).session(session);
-
     await session.commitTransaction();
     return res.status(200).json({
       status: "success",
