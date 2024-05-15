@@ -14,7 +14,7 @@ const sendEmail = async (datos) => {
     const correo = new SendSmtpEmail();
     correo.subject = `${datos.subject}`;
     correo.htmlContent = `
-    <h2 style="color: #333; font-family: Arial, sans-serif;">Estimado/a ${datos.name},</h2>
+    <h2 style="color: #333; font-family: Arial, sans-serif;">Firma Notarial</h2>
     <p style="color: #555; font-family: Arial, sans-serif;">${datos.message}</p>
     <p style="color: #777; font-family: Arial, sans-serif;">Firma Notarial.</p>
     `;

@@ -298,7 +298,7 @@ const addDocumentGeneric = async (req, res) => {
       typeDocument,
     } = req.query;
     const file = req.file;
-    console.log(file)
+    const {emails} = req.body;
     const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
     // función que formatea el nombre del documento
     const filename = generateValue(file.originalname);
@@ -335,17 +335,27 @@ const addDocumentGeneric = async (req, res) => {
       "interno",
       session
     );
-    // // ENVIAR EMAIL DE CONFIRMACIÓN
-    // const datos = {
-    //   subject: "Creación De Documento ${typeDocument}",
-    //   name: nameResponsible,
-    //   message: `Se ha subido el documento "${filename
-    //     .trim()
-    //     .replace(/\.pdf$/, "")}" con éxito.`,
-    //   to: [emailResponsible, emailClient],
-    // };
-    // await sendEmail(datos);
-    // await sendEmailTest(datos);
+    // ENVIAR EMAIL DE CONFIRMACIÓN
+    if (emails) {
+      emails.push(emailResponsible, emailClient)
+      const datos = {
+        subject: `Creación De Documento ${typeDocument}`,
+        message: `Se ha subido el documento "${filename
+          .trim()
+          .replace(/\.pdf$/, "")}" con éxito.`,
+        to: emails,
+      };
+      await sendEmail(datos);
+    } else {
+      const datos = {
+        subject: `Creación De Documento ${typeDocument}`,
+        message: `Se ha subido el documento "${filename
+          .trim()
+          .replace(/\.pdf$/, "")}" con éxito.`,
+        to: [emailResponsible, emailClient],
+      };
+      await sendEmail(datos);
+    }
     // RESPUESTA DEL SERVIDOR
     await session.commitTransaction();
     return res.status(200).json({
@@ -371,6 +381,7 @@ const editDocumentGeneric = async (req, res) => {
   try {
     const file = req.file;
     const { id } = req.query;
+    const { emails } = req.body;
     // actualizar el estado del documento conglomerado
     const document = await Pdf.findOne({ _id: id }).session(session);
     if (!document) {
@@ -402,7 +413,7 @@ const editDocumentGeneric = async (req, res) => {
       Key: document.idDocument,
     };
     await s3.send(new PutObjectCommand(paramsNew2));
-    const updated = await Pdf.findOneAndUpdate(
+    let updated = await Pdf.findOneAndUpdate(
       { _id: id },
       {
         $set: {
@@ -413,20 +424,32 @@ const editDocumentGeneric = async (req, res) => {
         new: true,
       }
     ).session(session);
-    console.log(updated, "updated------------------------------------");
     // ENVIAR EMAIL DE CONFIRMACIÓN
-    const base64Document = Buffer.from(file.buffer).toString("base64");
-    const datos = {
-      subject: "Actualización De Documento Genérico",
-      name: updated.nameResponsible,
-      message: `Se ha actualizado el documento "${updated.filenameDocument
-        .trim()
-        .replace(/\.pdf$/, "")}" con éxito.`,
-      to: [updated.emailResponsible, updated.emailClient],
-      base64Document,
-      filenameDocument: updated.filenameDocument,
-    };
-    await sendEmail(datos);
+    let base64Document = Buffer.from(file.buffer).toString("base64");
+        if (emails) {
+          emails.push(updated.emailResponsible, updated.emailClient)
+          const datos = {
+            subject: "Actualización De Documento Genérico",
+            message: `Se ha actualizado el documento "${updated.filenameDocument
+              .trim()
+              .replace(/\.pdf$/, "")}" con éxito.`,
+            to: emails,
+            base64Document,
+            filenameDocument: updated.filenameDocument,
+          };
+          await sendEmail(datos);
+        } else {
+          const datos = {
+            subject: "Actualización De Documento Genérico",
+            message: `Se ha actualizado el documento "${updated.filenameDocument
+              .trim()
+              .replace(/\.pdf$/, "")}" con éxito.`,
+            to: [updated.emailResponsible, updated.emailClient],
+            base64Document,
+            filenameDocument: updated.filenameDocument,
+          };
+          await sendEmail(datos);
+        }
     await session.commitTransaction();
     return res.status(200).json({
       status: "success",
