@@ -87,9 +87,9 @@ const addDocumentApi = async (req, res) => {
     });
     await s3.send(command);
     const usuario = {
-      nameResponsible,
-      rutResponsible,
-      emailResponsible,
+      name: nameResponsible,
+      rut: rutResponsible,
+      email: emailResponsible,
     };
     const cliente = {
       nameClient,
@@ -219,9 +219,9 @@ const addDocumentFeaApi = async (req, res) => {
       return;
     }
     const usuario = {
-      nameResponsible,
-      rutResponsible,
-      emailResponsible,
+      name: nameResponsible,
+      rut: rutResponsible,
+      email: emailResponsible,
     };
     const cliente = {
       nameClient,

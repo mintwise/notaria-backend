@@ -70,9 +70,9 @@ export const saveDocumentPdf = async (
   session
 ) => {
   const documentPdfTemplate = new Pdf({
-    nameResponsible: user.nameResponsible,
-    rutResponsible: user.rutResponsible,
-    emailResponsible: user.emailResponsible,
+    nameResponsible: user.name,
+    rutResponsible: user.rut,
+    emailResponsible: user.email,
     nameClient: client.nameClient,
     rutClient: client.rutClient,
     emailClient: client.emailClient,

@@ -298,14 +298,15 @@ const addDocumentGeneric = async (req, res) => {
       typeDocument,
     } = req.query;
     const file = req.file;
+    console.log(file)
     const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
     // función que formatea el nombre del documento
     const filename = generateValue(file.originalname);
     //inserta el documento en la bd PDF
     const usuario = {
-      nameResponsible,
-      rutResponsible,
-      emailResponsible,
+      name: nameResponsible,
+      rut: rutResponsible,
+      email: emailResponsible,
     };
     const cliente = {
       nameClient,
