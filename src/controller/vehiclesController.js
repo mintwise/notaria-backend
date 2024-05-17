@@ -14,24 +14,31 @@ import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import s3 from "../config/s3.js";
 import axios from "axios";
 //#region API ICONO
-const addDocumentApi = async (req, res) => {
+const addDocumentPromesa = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const {
+      nameResponsible,
+      rutResponsible,
+      emailResponsible,
+      rutClient,
+      typeDocument,
+    } = req.query;
+    const {
       // datos Vendedor
-      vendedorEsComunidad,
-      rutVendedor1,
-      apellidoPaternoRazonVendedor1,
-      apellidoMaternoVendedor1,
-      nombresVendedor1,
-      idTipoVendedor1,
-      calleDomicilioVendedor1,
-      numeroDomicilioVendedor1,
-      infoAddDomicilioVendedor1,
-      idComunaVendedor1,
-      celularVendedor1,
-      mailVendedor1,
+      vendedoresComunidad,
+      rutVendedor,
+      apellidoPaternoRazonVendedor,
+      apellidoMaternoVendedor,
+      nombresVendedor,
+      idTipoVendedor,
+      calleDomicilioVendedor,
+      numeroDomicilioVendedor,
+      infoAddDomicilioVendedor,
+      idComunaVendedor,
+      celularVendedor,
+      mailVendedor,
       // Comprador
       rutComprador,
       apellidoPaternoRazonComprador,
@@ -44,7 +51,7 @@ const addDocumentApi = async (req, res) => {
       idComunaComprador,
       celularComprador,
       mailComprador,
-      CompradorEsComunidad,
+      compradoresComunidad,
       // Contrato
       idNotarioRepertorio,
       numeroRepertorioVehiculo,
@@ -68,10 +75,10 @@ const addDocumentApi = async (req, res) => {
       numeroSerieVehiculo,
       numeroVinVehiculo,
       placaPatenteVehiculo,
+      // Emails
+      emails,
     } = req.body;
     const file = req.file;
-
-    const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
     //* PRIMER ENDPOINT
     //obtener username y password
     const formData = {
@@ -89,70 +96,72 @@ const addDocumentApi = async (req, res) => {
     const token = responseToken.data.find(
       (element) => "tokenVehiculos" in element
     );
-    console.log(token)
 
     //* SEGUNDO ENDPOINT
     // se inicia un formdata para enviar los datos
     const formData2 = new FormData();
-    const DatosVendedor = {
-      vendedorEsComunidad: parseInt(vendedorEsComunidad),
-      rutVendedor1,
-      apellidoPaternoRazonVendedor1,
-      apellidoMaternoVendedor1,
-      nombresVendedor1,
-      idTipoVendedor1: parseInt(idTipoVendedor1),
-      calleDomicilioVendedor1,
-      numeroDomicilioVendedor1,
-      infoAddDomicilioVendedor1,
-      idComunaVendedor1: parseInt(idComunaVendedor1),
-      celularVendedor1,
-      mailVendedor1,
-    };
-    const DatosComprador = {
-      rutComprador,
-      apellidoPaternoRazonComprador,
-      apellidoMaternoComprador,
-      nombresComprador,
-      idTipoComprador: parseInt(idTipoComprador),
-      calleDomicilioComprador,
-      numeroDomicilioComprador,
-      infoAddDomicilioComprador,
-      idComunaComprador: parseInt(idComunaComprador),
-      celularComprador,
-      mailComprador,
-      CompradorEsComunidad: parseInt(CompradorEsComunidad),
-    };
-    const DatosContrato = {
-      idNotarioRepertorio: parseInt(idNotarioRepertorio),
-      numeroRepertorioVehiculo: parseInt(numeroRepertorioVehiculo),
-      precioVentaVehiculo: parseInt(precioVentaVehiculo),
-      avaluoFiscalVehiculo: parseInt(avaluoFiscalVehiculo),
-      idTipoDocumento:  parseInt(idTipoDocumento),
-      numeroDocumentoSTEV: parseInt(numeroDocumentoSTEV),
-      idLugarSRCEI: parseInt(idLugarSRCEI),
-      fechaRepertorio: new Date(fechaRepertorio).toISOString().slice(0, 10),
-      fechaDocumento: new Date(fechaDocumento).toISOString().slice(0, 10),
-      impuestoVehiculo: parseInt(impuestoVehiculo),
-      CID,
-    };
-    const DatosVehículo = {
-      idTipoVehiculo: parseInt(idTipoVehiculo),
-      marcaVehiculo,
-      anoVehiculo: parseInt(anoVehiculo),
-      modeloVehiculo,
-      colorVehiculo,
-      numeroMotorVehiculo,
-      numeroChasisVehiculo,
-      numeroSerieVehiculo,
-      numeroVinVehiculo,
-      placaPatenteVehiculo
-    };
     // se agregan los datos al form-data
     formData2.append("tokenVehiculos", token.tokenVehiculos);
-    formData2.append("DatosVendedor", JSON.stringify(DatosVendedor));
-    formData2.append("DatosComprador", JSON.stringify(DatosComprador));
-    formData2.append("DatosContrato", JSON.stringify(DatosContrato));
-    formData2.append("DatosVehículo", JSON.stringify(DatosVehículo));
+    formData2.append("vendedoresComunidad", parseInt(vendedoresComunidad));
+    formData2.append("rutVendedor1", rutVendedor);
+    formData2.append(
+      "apellidoPaternoRazonVendedor1",
+      apellidoPaternoRazonVendedor
+    );
+    formData2.append("apellidoMaternoVendedor1", apellidoMaternoVendedor);
+    formData2.append("nombresVendedor1", nombresVendedor);
+    formData2.append("idTipoVendedor1", parseInt(idTipoVendedor));
+    formData2.append("calleDomicilioVendedor1", calleDomicilioVendedor);
+    formData2.append("numeroDomicilioVendedor1", numeroDomicilioVendedor);
+    formData2.append("infoAddDomicilioVendedor1", infoAddDomicilioVendedor);
+    formData2.append("idComunaVendedor1", parseInt(idComunaVendedor));
+    formData2.append("celularVendedor1", celularVendedor);
+    formData2.append("mailVendedor1", mailVendedor);
+    formData2.append("rutComprador1", rutComprador);
+    formData2.append(
+      "apellidoPaternoRazonComprador1",
+      apellidoPaternoRazonComprador
+    );
+    formData2.append("apellidoMaternoComprador1", apellidoMaternoComprador);
+    formData2.append("nombresComprador1", nombresComprador);
+    formData2.append("idTipoComprador1", parseInt(idTipoComprador));
+    formData2.append("calleDomicilioComprador1", calleDomicilioComprador);
+    formData2.append("numeroDomicilioComprador1", numeroDomicilioComprador);
+    formData2.append("infoAddDomicilioComprador1", infoAddDomicilioComprador);
+    formData2.append("idComunaComprador1", parseInt(idComunaComprador));
+    formData2.append("celularComprador1", celularComprador);
+    formData2.append("mailComprador1", mailComprador);
+    formData2.append("compradoresComunidad", parseInt(compradoresComunidad));
+    formData2.append("idNotarioRepertorio", parseInt(idNotarioRepertorio));
+    formData2.append(
+      "numeroRepertorioVehiculo",
+      parseInt(numeroRepertorioVehiculo)
+    );
+    formData2.append("precioVentaVehiculo", parseInt(precioVentaVehiculo));
+    formData2.append("avaluoFiscalVehiculo", parseInt(avaluoFiscalVehiculo));
+    formData2.append("idTipoDocumento", parseInt(idTipoDocumento));
+    formData2.append("numeroDocumentoSTEV", parseInt(numeroDocumentoSTEV));
+    formData2.append("idLugarSRCEI", parseInt(idLugarSRCEI));
+    formData2.append(
+      "fechaRepertorio",
+      new Date(fechaRepertorio).toISOString().slice(0, 10)
+    );
+    formData2.append(
+      "fechaDocumento",
+      new Date(fechaDocumento).toISOString().slice(0, 10)
+    );
+    formData2.append("impuestoVehiculo", parseInt(impuestoVehiculo));
+    formData2.append("CID", CID);
+    formData2.append("idTipoVehiculo", parseInt(idTipoVehiculo));
+    formData2.append("marcaVehiculo", marcaVehiculo);
+    formData2.append("anoVehiculo", parseInt(anoVehiculo));
+    formData2.append("modeloVehiculo", modeloVehiculo);
+    formData2.append("colorVehiculo", colorVehiculo);
+    formData2.append("numeroMotorVehiculo", numeroMotorVehiculo);
+    formData2.append("numeroChasisVehiculo", numeroChasisVehiculo);
+    formData2.append("numeroSerieVehiculo", numeroSerieVehiculo);
+    formData2.append("numeroVinVehiculo", numeroVinVehiculo);
+    formData2.append("placaPatenteVehiculo", placaPatenteVehiculo);
     // llamada a la api
     const apiUrl2 = "https://www.notariosycbrs.cl/SrvcsRst/NyctRprtrs.php";
     const config2 = {
@@ -160,53 +169,111 @@ const addDocumentApi = async (req, res) => {
         "Content-Type": "multipart/form-data",
       },
     };
-    const responseApi2 = await axios.post(apiUrl2, formData2, config2)
-    console.log(responseApi2, "response 2 data------------------------------------")
-    console.log(typeof responseApi2.data, "response 2 data------------------------------------")
-
+    const responseApi2 = await axios.post(apiUrl2, formData2, config2);
 
     //* TERCER ENDPOINT
     const apiUrl3 = "https://www.notariosycbrs.cl/SrvcsRst/CrgRchv.php";
     const formData3 = new FormData();
     formData3.append("tokenVehiculos", token.tokenVehiculos);
-    //! ACA se debe adjuntar la respuesta del segundo endpoint pero como responseApi2.data es un String se debe confirmar
-    formData3.append("idRepertorioVehiculo", 23456);
-    //! --------------------------------------------------------------------------------------------------------------
+    formData3.append(
+      "idRepertorioVehiculo",
+      responseApi2.data[1].numeroIdRepertorio
+    );
     const blob = new Blob([file.buffer], { type: "application/pdf" });
     formData3.append("archivo", blob, file.originalname);
-    const responseApi3 = await axios.post(apiUrl3, formData3, {
+    await axios.post(apiUrl3, formData3, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
     });
-    // console.log(responseApi3.data, "response 3 data------------------------------------");
     //* CUARTO ENDPOINT
     const apiUrl4 = "https://www.notariosycbrs.cl/SrvcsRst/CnsltStd.php";
     const formData4 = new FormData();
     formData4.append("tokenVehiculos", token.tokenVehiculos);
-    formData4.append("idRepertorioVehiculo", 23456);
+    formData4.append(
+      "idRepertorioVehiculo",
+      responseApi2.data[1].numeroIdRepertorio
+    );
     const responseApi4 = await axios.post(apiUrl4, formData4, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
     });
-    // console.log(responseApi4.data, "response 4 data------------------------------------");
     //* QUINTO ENDPOINT (nosotros)
+    const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
+    // función que formatea el nombre del documento
+    const filename = generateValue(file.originalname);
+    //inserta el documento en la bd PDF
+    const usuario = {
+      name: nameResponsible,
+      rut: rutResponsible,
+      email: emailResponsible,
+    };
+    //TODO: confirmar esta data 
+    const cliente = {
+      nameClient: nombresComprador,
+      rutClient,
+      emailClient: mailComprador,
+    };
+    const idDocument = v4();
+    const urlDocument = `${url}${idDocument}`;
+    // agregar en s3
+    const command = new PutObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: idDocument,
+      Body: file.buffer,
+      ContentType: "application/pdf",
+    });
+    await s3.send(command);
+    const statusApi = responseApi4.data.find((element) => "estado" in element);
+    let statusToBd = statusApi ? statusApi.estado : "No Iniciado";
+    await saveDocumentPdf(
+      usuario,
+      cliente,
+      statusToBd,
+      typeDocument,
+      null,
+      urlDocument,
+      idDocument,
+      filename,
+      "interno",
+      session
+    );
     // ENVIAR EMAIL DE CONFIRMACIÓN
-    // const datos = {
-    //   subject: "Creación De Documento Genérico",
-    //   name: "Notaria Camilla",
-    //   message: `Se ha subido el documento "${file.originalname
-    //     .trim()
-    //     .replace(/\.pdf$/, "")}" con éxito.`,
-    //   to: [mailVendedor1, mailComprador],
-    // };
-    // await sendEmail(datos);
+    const base64Document = Buffer.from(file.buffer).toString("base64");
+    if (emails) {
+      emails.push(
+        mailVendedor,
+        mailComprador,
+        "firmanotarial@notariacamilla.cl"
+      );
+      const datos = {
+        subject: `Creación De Documento ${typeDocument}`,
+        message: `Se ha subido el documento "${filename
+          .trim()
+          .replace(/\.pdf$/, "")}" con éxito.`,
+        to: emails,
+        base64Document,
+        filenameDocument: filename
+      };
+      await sendEmail(datos);
+    } else {
+      const datos = {
+        subject: `Creación De Documento ${typeDocument}`,
+        message: `Se ha subido el documento "${filename
+          .trim()
+          .replace(/\.pdf$/, "")}" con éxito.`,
+        to: [mailVendedor, mailComprador, "firmanotarial@notariacamilla.cl"],
+        base64Document,
+        filenameDocument: filename
+      };
+      await sendEmail(datos);
+    }
     // RESPUESTA DEL SERVIDOR
     await session.commitTransaction();
     return res.status(200).json({
       status: "success",
-      message: `Creado con éxito.`,
+      message: `Documento creado con éxito.`,
       data: {},
     });
   } catch (error) {
@@ -220,14 +287,14 @@ const addDocumentApi = async (req, res) => {
     session.endSession();
   }
 };
-// #region DOCUMENTOS GENÉRICOS
-const listDocumentGeneric = async (req, res) => {
+// #region DOCUMENTOS PROMESA
+const listDocumentPromesa = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const documents = await Pdf.find(
       {
-        typeDocument: { $eq: "Genérico" },
+        typeDocument: { $eq: "Promesa" },
       },
       {
         __v: 0,
@@ -253,7 +320,7 @@ const listDocumentGeneric = async (req, res) => {
   }
 };
 
-const getDocumentGeneric = async (req, res) => {
+const getDocumentPromesa = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -284,98 +351,7 @@ const getDocumentGeneric = async (req, res) => {
   }
 };
 
-const addDocumentGeneric = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const {
-      nameResponsible,
-      rutResponsible,
-      emailResponsible,
-      nameClient,
-      rutClient,
-      emailClient,
-      typeDocument,
-    } = req.query;
-    const file = req.file;
-    const {emails} = req.body;
-    const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
-    // función que formatea el nombre del documento
-    const filename = generateValue(file.originalname);
-    //inserta el documento en la bd PDF
-    const usuario = {
-      name: nameResponsible,
-      rut: rutResponsible,
-      email: emailResponsible,
-    };
-    const cliente = {
-      nameClient,
-      rutClient,
-      emailClient,
-    };
-    const idDocument = v4();
-    const urlDocument = `${url}${idDocument}`;
-    // agregar en s3
-    const command = new PutObjectCommand({
-      Bucket: process.env.AWS_BUCKET_NAME,
-      Key: idDocument,
-      Body: file.buffer,
-      ContentType: "application/pdf",
-    });
-    await s3.send(command);
-    const promesaDocument = await saveDocumentPdf(
-      usuario,
-      cliente,
-      "Pendiente Revisión",
-      typeDocument,
-      null,
-      urlDocument,
-      idDocument,
-      filename,
-      "interno",
-      session
-    );
-    // ENVIAR EMAIL DE CONFIRMACIÓN
-    if (emails) {
-      emails.push(emailResponsible, emailClient)
-      const datos = {
-        subject: `Creación De Documento ${typeDocument}`,
-        message: `Se ha subido el documento "${filename
-          .trim()
-          .replace(/\.pdf$/, "")}" con éxito.`,
-        to: emails,
-      };
-      await sendEmail(datos);
-    } else {
-      const datos = {
-        subject: `Creación De Documento ${typeDocument}`,
-        message: `Se ha subido el documento "${filename
-          .trim()
-          .replace(/\.pdf$/, "")}" con éxito.`,
-        to: [emailResponsible, emailClient],
-      };
-      await sendEmail(datos);
-    }
-    // RESPUESTA DEL SERVIDOR
-    await session.commitTransaction();
-    return res.status(200).json({
-      status: "success",
-      message: `Creado con éxito.`,
-      data: promesaDocument,
-    });
-  } catch (error) {
-    session.abortTransaction();
-    return res.status(500).json({
-      status: "error",
-      message: `${error.message}`,
-      data: {},
-    });
-  } finally {
-    session.endSession();
-  }
-};
-
-const editDocumentGeneric = async (req, res) => {
+const editDocumentPromesa = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -426,30 +402,30 @@ const editDocumentGeneric = async (req, res) => {
     ).session(session);
     // ENVIAR EMAIL DE CONFIRMACIÓN
     let base64Document = Buffer.from(file.buffer).toString("base64");
-        if (emails) {
-          emails.push(updated.emailResponsible, updated.emailClient)
-          const datos = {
-            subject: "Actualización De Documento Genérico",
-            message: `Se ha actualizado el documento "${updated.filenameDocument
-              .trim()
-              .replace(/\.pdf$/, "")}" con éxito.`,
-            to: emails,
-            base64Document,
-            filenameDocument: updated.filenameDocument,
-          };
-          await sendEmail(datos);
-        } else {
-          const datos = {
-            subject: "Actualización De Documento Genérico",
-            message: `Se ha actualizado el documento "${updated.filenameDocument
-              .trim()
-              .replace(/\.pdf$/, "")}" con éxito.`,
-            to: [updated.emailResponsible, updated.emailClient],
-            base64Document,
-            filenameDocument: updated.filenameDocument,
-          };
-          await sendEmail(datos);
-        }
+    if (emails) {
+      emails.push(updated.emailResponsible, updated.emailClient);
+      const datos = {
+        subject: "Actualización De Documento Genérico",
+        message: `Se ha actualizado el documento "${updated.filenameDocument
+          .trim()
+          .replace(/\.pdf$/, "")}" con éxito.`,
+        to: emails,
+        base64Document,
+        filenameDocument: updated.filenameDocument,
+      };
+      await sendEmail(datos);
+    } else {
+      const datos = {
+        subject: "Actualización De Documento Genérico",
+        message: `Se ha actualizado el documento "${updated.filenameDocument
+          .trim()
+          .replace(/\.pdf$/, "")}" con éxito.`,
+        to: [updated.emailResponsible, updated.emailClient],
+        base64Document,
+        filenameDocument: updated.filenameDocument,
+      };
+      await sendEmail(datos);
+    }
     await session.commitTransaction();
     return res.status(200).json({
       status: "success",
@@ -468,7 +444,7 @@ const editDocumentGeneric = async (req, res) => {
   }
 };
 
-const deleteDocumentGeneric = async (req, res) => {
+const deleteDocumentPromesa = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -504,10 +480,9 @@ const deleteDocumentGeneric = async (req, res) => {
 };
 
 export {
-  listDocumentGeneric,
-  getDocumentGeneric,
-  addDocumentGeneric,
-  editDocumentGeneric,
-  deleteDocumentGeneric,
-  addDocumentApi,
+  listDocumentPromesa,
+  getDocumentPromesa,
+  addDocumentPromesa,
+  editDocumentPromesa,
+  deleteDocumentPromesa,
 };
