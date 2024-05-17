@@ -13,6 +13,7 @@ import { v4 } from "uuid";
 import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import s3 from "../config/s3.js";
 import axios from "axios";
+import { compressPdf } from "../utils/converter.js";
 //#region API ICONO
 const addDocumentPromesa = async (req, res) => {
   const session = await mongoose.startSession();
@@ -79,6 +80,14 @@ const addDocumentPromesa = async (req, res) => {
       emails,
     } = req.body;
     const file = req.file;
+    //* OPTIMIZACIÓN DEL PDF
+    const base64Document = Buffer.from(file.buffer).toString("base64");
+    const newFile = await compressPdf(base64Document, file.originalname);
+    const fileSizeInMB = newFile.length / (1024 * 1024);
+    if (fileSizeInMB >= 2) {
+      handleErrorResponse(res, 400, "El tamaño del el archivo debe ser menor a 2 MB.");
+      return;
+    }
     //* PRIMER ENDPOINT
     //obtener username y password
     const formData = {
@@ -96,7 +105,7 @@ const addDocumentPromesa = async (req, res) => {
     const token = responseToken.data.find(
       (element) => "tokenVehiculos" in element
     );
-
+    //#region segundo endpoint
     //* SEGUNDO ENDPOINT
     // se inicia un formdata para enviar los datos
     const formData2 = new FormData();
@@ -170,7 +179,6 @@ const addDocumentPromesa = async (req, res) => {
       },
     };
     const responseApi2 = await axios.post(apiUrl2, formData2, config2);
-
     //* TERCER ENDPOINT
     const apiUrl3 = "https://www.notariosycbrs.cl/SrvcsRst/CrgRchv.php";
     const formData3 = new FormData();
@@ -179,12 +187,13 @@ const addDocumentPromesa = async (req, res) => {
       "idRepertorioVehiculo",
       responseApi2.data[1].numeroIdRepertorio
     );
-    const blob = new Blob([file.buffer], { type: "application/pdf" });
+    const blob = new Blob([newFile], { type: "application/pdf" });
     formData3.append("archivo", blob, file.originalname);
-    await axios.post(apiUrl3, formData3, {
+    const response3 = await axios.post(apiUrl3, formData3, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
+      timeout: 120000,
     });
     //* CUARTO ENDPOINT
     const apiUrl4 = "https://www.notariosycbrs.cl/SrvcsRst/CnsltStd.php";
@@ -198,6 +207,7 @@ const addDocumentPromesa = async (req, res) => {
       headers: {
         "Content-Type": "multipart/form-data",
       },
+      timeout: 120000,
     });
     //* QUINTO ENDPOINT (nosotros)
     const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
@@ -221,7 +231,7 @@ const addDocumentPromesa = async (req, res) => {
     const command = new PutObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: idDocument,
-      Body: file.buffer,
+      Body: newFile,
       ContentType: "application/pdf",
     });
     await s3.send(command);
@@ -240,7 +250,7 @@ const addDocumentPromesa = async (req, res) => {
       session
     );
     // ENVIAR EMAIL DE CONFIRMACIÓN
-    const base64Document = Buffer.from(file.buffer).toString("base64");
+    const base64NewFile = Buffer.from(newFile).toString("base64");
     if (emails) {
       emails.push(
         mailVendedor,
@@ -253,7 +263,7 @@ const addDocumentPromesa = async (req, res) => {
           .trim()
           .replace(/\.pdf$/, "")}" con éxito.`,
         to: emails,
-        base64Document,
+        base64NewFile,
         filenameDocument: filename
       };
       await sendEmail(datos);
@@ -264,7 +274,7 @@ const addDocumentPromesa = async (req, res) => {
           .trim()
           .replace(/\.pdf$/, "")}" con éxito.`,
         to: [mailVendedor, mailComprador, "firmanotarial@notariacamilla.cl"],
-        base64Document,
+        base64NewFile,
         filenameDocument: filename
       };
       await sendEmail(datos);
