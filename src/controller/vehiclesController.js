@@ -100,7 +100,6 @@ const addDocumentPromesa = async (req, res) => {
     const responseToken = await axios.post(apiUrl, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-    // console.log(responseToken.data, "response 1 data------------------------------------")
     //obtener token
     const token = responseToken.data.find(
       (element) => "tokenVehiculos" in element
