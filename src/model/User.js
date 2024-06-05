@@ -22,6 +22,10 @@ const UserSchema = new mongoose.Schema({
         type: String,
         default: ""
     },
+    "v-m": {
+        type: Boolean,
+        default: false
+    },
     token: {
         type: String,
         default: generarId()

@@ -339,15 +339,6 @@ const changeStateDocumentFeaApi = async (req, res) => {
   try {
     const { id } = req.query;
     const file = req.file;
-    //TODO: cambiar a base64
-    if (req.user.role !== "AdminNotaria") {
-      handleErrorResponse(
-        res,
-        400,
-        "No tiene permisos para realizar esta acción."
-      );
-      return;
-    }
     // actualizar el estado del documento conglomerado
     const document = await documentPDF.findOne({ _id: id }).session(session);
     if (document.typeDocument !== "Documento FEA") {
