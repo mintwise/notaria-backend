@@ -14,7 +14,6 @@ import {
   registrar,
 } from "../controller/userController.js";
 import checkAuth from "../middleware/authMiddleware.js";
-import multer from "multer";
 const router = express.Router();
 // const storage = multer.memoryStorage();
 // const upload = multer({

@@ -161,7 +161,6 @@ const addDocumentApi = async (req, res) => {
       });
     }
   } catch (error) {
-    console.log(error);
     session.abortTransaction();
     return res.status(500).json({
       status: "error",
@@ -296,9 +295,7 @@ const addDocumentFeaApi = async (req, res) => {
           pages: pages.length,
         },
       });
-    }
-    // insertar en la bd Colección Clients
-    if (client.documents.length) {
+    } else {
       const document = {
         _id: result._id,
         filename,
@@ -321,6 +318,7 @@ const addDocumentFeaApi = async (req, res) => {
       });
     }
   } catch (error) {
+    console.log(error);
     await session.abortTransaction();
     return res.status(400).json({
       status: "error",
@@ -400,7 +398,6 @@ const changeStateDocumentFeaApi = async (req, res) => {
     axios
       .post(apiUrl, bodyAxios, config)
       .then((response) => {
-        console.log("Respuesta de la API:", response.data);
       })
       .catch((error) => {
         console.error("Error al comunicarse con la API:", error);
