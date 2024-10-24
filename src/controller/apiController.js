@@ -209,14 +209,6 @@ const addDocumentFeaApi = async (req, res) => {
     }
     const filename = generateValue(filenameDocument);
     const client = await Client.findOne({ rutClient });
-    if (!client) {
-      handleErrorResponse(
-        res,
-        400,
-        `No existe el cliente con rut ${rutClient}.`
-      );
-      return;
-    }
     const usuario = {
       name: nameResponsible,
       rut: rutResponsible,
@@ -227,17 +219,19 @@ const addDocumentFeaApi = async (req, res) => {
       rutClient,
       emailClient,
     };
-    const isDuplicate = client?.documents.some(
-      (doc) => doc.filename === filename
-    );
-
-    if (isDuplicate) {
-      handleErrorResponse(
-        res,
-        400,
-        `Ya existe un documento con el nombre ${filename}.`
+    if (client) {
+      const isDuplicate = client?.documents.some(
+        (doc) => doc.filename === filename
       );
-      return;
+  
+      if (isDuplicate) {
+        handleErrorResponse(
+          res,
+          400,
+          `Ya existe un documento con el nombre ${filename}.`
+        );
+        return;
+      }
     }
     const newFile = await compressPdf(base64Document, filename);
     //? subir documento en amazon
